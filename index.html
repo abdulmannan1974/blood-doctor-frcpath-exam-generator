@@ -1,0 +1,2026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blood🩸Doctor | FRCPath Exam Question Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- PDF.js for PDF extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Mammoth.js for Word documents -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <!-- SheetJS for Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Marked for Markdown rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <!-- PPTXjs dependencies -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      --ink: #11131a;
+      --slate: #2b2f3a;
+      --muted: #5c6170;
+      --blood: #8b0e1c;
+      --blood-soft: #b73345;
+      --gold: #d7a35d;
+      --teal: #0f766e;
+      --teal-soft: #cde8e4;
+      --rose: #f4d8dd;
+      --ivory: #f7f2ed;
+      --mist: #f3f6f8;
+      --white: #ffffff;
+      --shadow: 0 28px 60px rgba(17, 19, 26, 0.18);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Sora', system-ui, sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top, #ffffff 0%, #f6efe8 38%, #efe3d7 100%);
+      min-height: 100vh;
+    }
+
+    /* Navigation */
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 5vw;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid rgba(17,19,26,0.08);
+    }
+
+    .brand { font-size: 1.4rem; font-weight: 700; }
+
+    .nav-right { display: flex; align-items: center; gap: 12px; }
+
+    .api-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .api-status.connected { background: var(--teal-soft); color: var(--teal); }
+    .api-status.disconnected { background: var(--rose); color: var(--blood); }
+    .api-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .api-status.connected .api-dot { background: var(--teal); }
+    .api-status.disconnected .api-dot { background: var(--blood); }
+
+    /* Hero */
+    .hero {
+      padding: 40px 5vw 30px;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-family: 'Fraunces', serif;
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      margin-bottom: 12px;
+    }
+
+    .hero p {
+      color: var(--muted);
+      max-width: 700px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: var(--rose);
+      color: var(--blood);
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    /* Main Container */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 5vw 60px;
+    }
+
+    /* Grid Layout */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* Cards */
+    .card {
+      background: white;
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+    }
+
+    .card h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.3rem;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-tag {
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      font-weight: 600;
+      font-family: 'Sora', sans-serif;
+    }
+
+    /* Form Elements */
+    .form-group { margin-bottom: 18px; }
+
+    .form-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+
+    .form-select, .form-input, .form-textarea {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid rgba(17,19,26,0.15);
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: white;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-select:focus, .form-input:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--blood);
+      box-shadow: 0 0 0 3px rgba(139,14,28,0.1);
+    }
+
+    .form-textarea { min-height: 100px; resize: vertical; }
+
+    /* File Upload Zone */
+    .upload-zone {
+      border: 2px dashed rgba(17,19,26,0.2);
+      border-radius: 16px;
+      padding: 30px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--mist);
+      margin-bottom: 16px;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--blood);
+      background: var(--rose);
+    }
+
+    .upload-zone.has-files {
+      border-color: var(--teal);
+      background: var(--teal-soft);
+    }
+
+    .upload-icon { font-size: 3rem; margin-bottom: 12px; }
+    .upload-text { font-weight: 600; margin-bottom: 6px; }
+    .upload-hint { font-size: 0.85rem; color: var(--muted); }
+    .file-input { display: none; }
+
+    /* File List */
+    .file-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+    .file-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: white;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      border: 1px solid rgba(17,19,26,0.1);
+    }
+
+    .file-chip-remove {
+      cursor: pointer;
+      color: var(--blood);
+      font-weight: bold;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--blood);
+      color: white;
+      box-shadow: 0 12px 32px rgba(139,14,28,0.25);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 40px rgba(139,14,28,0.3);
+    }
+
+    .btn-secondary { background: var(--ivory); color: var(--ink); }
+    .btn-secondary:hover { background: var(--rose); }
+    .btn-teal { background: var(--teal); color: white; }
+    .btn-teal:hover:not(:disabled) { background: #0d5f58; }
+    .btn-gold { background: var(--gold); color: white; }
+    .btn-gold:hover:not(:disabled) { background: #c4923e; }
+    .btn-small { padding: 8px 16px; font-size: 0.85rem; }
+
+    .btn-group { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+
+    /* Output Area */
+    .output-container {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: sticky;
+      top: 80px;
+    }
+
+    .output-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: var(--mist);
+      border-bottom: 1px solid rgba(17,19,26,0.08);
+    }
+
+    .output-header h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.2rem;
+      margin: 0;
+    }
+
+    .output-actions { display: flex; gap: 8px; }
+
+    .output-body {
+      padding: 24px;
+      min-height: 400px;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+
+    .output-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .output-placeholder-icon { font-size: 4rem; margin-bottom: 16px; opacity: 0.5; }
+
+    /* Rendered Markdown Output */
+    .rendered-output {
+      line-height: 1.7;
+      font-size: 0.95rem;
+    }
+    .rendered-output h1 { font-family: 'Fraunces', serif; font-size: 1.6rem; margin: 24px 0 12px; color: var(--blood); border-bottom: 2px solid var(--rose); padding-bottom: 8px; }
+    .rendered-output h2 { font-family: 'Fraunces', serif; font-size: 1.3rem; margin: 20px 0 10px; color: var(--teal); }
+    .rendered-output h3 { font-size: 1.1rem; margin: 16px 0 8px; font-weight: 700; }
+    .rendered-output h4 { font-size: 1rem; margin: 12px 0 6px; color: var(--muted); }
+    .rendered-output p { margin-bottom: 12px; }
+    .rendered-output ul, .rendered-output ol { margin: 8px 0 12px 20px; }
+    .rendered-output li { margin-bottom: 4px; }
+    .rendered-output strong { color: var(--blood); }
+    .rendered-output code { background: var(--mist); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+    .rendered-output pre { background: #1e1e2e; color: #cdd6f4; border-radius: 12px; padding: 16px; overflow-x: auto; margin: 12px 0; }
+    .rendered-output pre code { background: none; color: inherit; padding: 0; }
+    .rendered-output blockquote { border-left: 4px solid var(--gold); padding: 8px 16px; margin: 12px 0; background: #fff9ef; border-radius: 0 8px 8px 0; }
+    .rendered-output table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.9rem; }
+    .rendered-output th { background: var(--mist); padding: 10px 12px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--teal-soft); }
+    .rendered-output td { padding: 8px 12px; border-bottom: 1px solid rgba(17,19,26,0.08); }
+    .rendered-output tr:hover td { background: var(--ivory); }
+    .rendered-output hr { border: none; height: 2px; background: var(--rose); margin: 24px 0; }
+
+    /* Streaming cursor */
+    .streaming-cursor::after {
+      content: '|';
+      animation: blink 0.8s infinite;
+      color: var(--blood);
+      font-weight: bold;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* Progress Bar */
+    .progress-bar {
+      height: 4px;
+      background: var(--mist);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--blood), var(--gold));
+      border-radius: 2px;
+      transition: width 0.5s ease;
+      width: 0%;
+    }
+    .progress-bar-fill.indeterminate {
+      width: 30%;
+      animation: indeterminate 1.5s infinite ease-in-out;
+    }
+    @keyframes indeterminate {
+      0% { margin-left: 0%; width: 30%; }
+      50% { margin-left: 35%; width: 30%; }
+      100% { margin-left: 70%; width: 30%; }
+    }
+
+    /* Generation Status */
+    .gen-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--ivory);
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .gen-status .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid var(--rose);
+      border-top-color: var(--blood);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Prompt Output for Claude Code */
+    .prompt-output {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      border-radius: 12px;
+      padding: 20px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    /* Instructions Panel */
+    .instructions-panel {
+      background: linear-gradient(135deg, var(--teal-soft) 0%, #e8f5f3 100%);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(15, 118, 110, 0.2);
+    }
+
+    .instructions-panel h4 {
+      color: var(--teal);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .instructions-panel ol { padding-left: 20px; line-height: 1.8; }
+    .instructions-panel li { margin-bottom: 8px; }
+    .instructions-panel code {
+      background: rgba(15, 118, 110, 0.15);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    /* Source Preview */
+    .source-preview {
+      background: var(--mist);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+    .source-preview-header { font-weight: 600; margin-bottom: 8px; color: var(--teal); }
+
+    /* Question Count Selector */
+    .count-selector { display: flex; align-items: center; gap: 12px; }
+
+    .count-btn {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: 1px solid rgba(17,19,26,0.15);
+      background: white;
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .count-btn:hover { background: var(--ivory); }
+    .count-display { font-size: 1.5rem; font-weight: 700; min-width: 40px; text-align: center; }
+
+    /* Callout */
+    .callout {
+      background: var(--teal-soft);
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin: 16px 0;
+      font-size: 0.9rem;
+    }
+    .callout.warning { background: #fff3e6; border: 1px solid rgba(215,163,93,0.4); }
+    .callout.info { background: var(--rose); border: 1px solid rgba(139,14,28,0.2); }
+    .callout strong { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+
+    /* Footer */
+    .footer {
+      padding: 24px 5vw;
+      background: var(--ink);
+      color: rgba(255,255,255,0.7);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.9rem;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 14px 24px;
+      background: var(--ink);
+      color: white;
+      border-radius: 12px;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      z-index: 1000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { background: var(--teal); }
+    .toast.error { background: var(--blood); }
+
+    /* Step indicator */
+    .step-indicator {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--mist);
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .step.active { background: var(--blood); color: white; }
+    .step.completed { background: var(--teal); color: white; }
+    .step-number {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+    }
+
+    /* URL Input */
+    .url-input-group { display: flex; gap: 8px; margin-bottom: 12px; }
+    .url-input-group input { flex: 1; }
+    .url-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .url-chip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--mist);
+      border-radius: 10px;
+      font-size: 0.85rem;
+    }
+
+    .url-chip-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-right: 12px;
+    }
+
+    /* Copy success animation */
+    @keyframes copySuccess {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    .copy-success { animation: copySuccess 0.3s ease; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(17,19,26,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .modal-overlay.visible { opacity: 1; pointer-events: all; }
+    .modal {
+      background: white;
+      border-radius: var(--radius);
+      padding: 32px;
+      max-width: 480px;
+      width: 90%;
+      box-shadow: 0 32px 64px rgba(0,0,0,0.2);
+    }
+    .modal h3 { font-family: 'Fraunces', serif; font-size: 1.4rem; margin-bottom: 16px; }
+    .modal p { color: var(--muted); margin-bottom: 20px; line-height: 1.6; font-size: 0.9rem; }
+    .modal .form-group { margin-bottom: 16px; }
+
+    /* Type checkbox grid */
+    .type-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .type-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--mist);
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.2s;
+      border: 2px solid transparent;
+      user-select: none;
+    }
+    .type-checkbox:hover { background: var(--ivory); }
+    .type-checkbox.selected { background: var(--teal-soft); border-color: var(--teal); }
+    .type-checkbox input { display: none; }
+    .type-checkbox .check-icon {
+      width: 20px; height: 20px;
+      border-radius: 4px;
+      border: 2px solid rgba(17,19,26,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .type-checkbox.selected .check-icon {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: white;
+    }
+
+    /* Mode toggle */
+    .mode-toggle {
+      display: flex;
+      background: var(--mist);
+      border-radius: 999px;
+      padding: 4px;
+      margin-bottom: 20px;
+    }
+    .mode-toggle-btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      font-family: inherit;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      transition: all 0.2s;
+    }
+    .mode-toggle-btn.active {
+      background: white;
+      color: var(--ink);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    /* Source type badges */
+    .source-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .source-badge {
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--ivory);
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    /* Download buttons row */
+    .download-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    /* Question type all info */
+    .all-types-info {
+      background: var(--ivory);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-top: 12px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .all-types-info strong { color: var(--ink); }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .type-grid { grid-template-columns: 1fr; }
+      .nav { padding: 12px 4vw; }
+      .hero { padding: 24px 4vw 20px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="brand">Blood🩸Doctor</div>
+    <div class="nav-right">
+      <button class="api-status disconnected" id="apiStatusBtn" onclick="openApiModal()">
+        <span class="api-dot"></span>
+        <span id="apiStatusText">Set API Key</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <header class="hero">
+    <div class="pill">#BloodDoctor | FRCPath Haematology</div>
+    <h1>AI Exam Question Generator</h1>
+    <p>Upload sources from any format, configure settings, and generate complete exam questions directly using Claude AI.</p>
+  </header>
+
+  <!-- API Key Modal -->
+  <div class="modal-overlay" id="apiModal">
+    <div class="modal">
+      <h3>Claude API Key</h3>
+      <p>Enter your Anthropic API key to enable direct question generation. Your key is stored only in your browser's local storage.</p>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input type="password" class="form-input" id="apiKeyInput" placeholder="sk-ant-...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Model</label>
+        <select class="form-select" id="modelSelect">
+          <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Recommended)</option>
+          <option value="claude-opus-4-20250514">Claude Opus 4</option>
+          <option value="claude-haiku-4-20250514">Claude Haiku 4</option>
+        </select>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="saveApiKey()">Save Key</button>
+        <button class="btn btn-secondary" onclick="closeApiModal()">Cancel</button>
+        <button class="btn btn-secondary" onclick="clearApiKey()" style="color: var(--blood);">Remove Key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <main class="container">
+    <!-- Instructions Panel -->
+    <div class="instructions-panel">
+      <h4>How to Use</h4>
+      <ol>
+        <li><strong>Set your API key</strong> - Click the button in the top-right corner</li>
+        <li><strong>Upload sources</strong> - Add PDFs, Word docs, PPTs, paste text, add URLs (websites, YouTube, Notion, Google Docs, etc.)</li>
+        <li><strong>Configure settings</strong> - Choose question types (single or all), difficulty, and count</li>
+        <li><strong>Generate questions</strong> - Click the button and watch your exam questions stream in real-time</li>
+        <li><strong>Download</strong> - Copy or download the generated questions as Markdown</li>
+      </ol>
+    </div>
+
+    <!-- Step Indicator -->
+    <div class="step-indicator">
+      <div class="step active" id="step1">
+        <span class="step-number">1</span>
+        <span>Add Sources</span>
+      </div>
+      <div class="step" id="step2">
+        <span class="step-number">2</span>
+        <span>Configure</span>
+      </div>
+      <div class="step" id="step3">
+        <span class="step-number">3</span>
+        <span>Generate</span>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Left Column - Input -->
+      <div>
+        <!-- Source Upload Card -->
+        <div class="card">
+          <h3>Upload Sources <span class="card-tag">Step 1</span></h3>
+
+          <!-- File Upload Zone -->
+          <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">📄</div>
+            <div class="upload-text">Drop files here or click to upload</div>
+            <div class="upload-hint">PDF, Word, PowerPoint, Excel, Images, Text/Markdown</div>
+            <input type="file" class="file-input" id="fileInput" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.txt,.md,.html,.htm,.rtf">
+          </div>
+          <div class="source-badges">
+            <span class="source-badge">PDF</span>
+            <span class="source-badge">DOCX</span>
+            <span class="source-badge">PPTX</span>
+            <span class="source-badge">XLSX/CSV</span>
+            <span class="source-badge">Images</span>
+            <span class="source-badge">TXT/MD</span>
+            <span class="source-badge">HTML</span>
+          </div>
+          <div class="file-list" id="fileList"></div>
+
+          <!-- URL Input -->
+          <div class="form-group" style="margin-top: 16px;">
+            <label class="form-label">Add URL</label>
+            <div class="url-input-group">
+              <input type="url" class="form-input" id="urlInput" placeholder="Website, YouTube, Notion, Google Docs, etc.">
+              <button class="btn btn-small btn-secondary" onclick="addUrl()">Add</button>
+            </div>
+            <div class="source-badges" style="margin-bottom: 8px;">
+              <span class="source-badge">Websites</span>
+              <span class="source-badge">YouTube</span>
+              <span class="source-badge">Notion</span>
+              <span class="source-badge">Google Docs</span>
+              <span class="source-badge">Google Slides</span>
+              <span class="source-badge">OneDrive</span>
+            </div>
+            <div class="url-list" id="urlList"></div>
+          </div>
+
+          <!-- Direct Text Input -->
+          <div class="form-group">
+            <label class="form-label">Or paste text directly</label>
+            <textarea class="form-textarea" id="directText" placeholder="Paste article text, guidelines, or any content here..." style="min-height: 120px;"></textarea>
+          </div>
+
+          <!-- Source Preview -->
+          <div class="source-preview" id="sourcePreview" style="display: none;">
+            <div class="source-preview-header">Extracted Content Preview</div>
+            <div id="sourcePreviewContent"></div>
+          </div>
+        </div>
+
+        <!-- Question Settings Card -->
+        <div class="card">
+          <h3>Question Settings <span class="card-tag">Step 2</span></h3>
+
+          <!-- Mode Toggle -->
+          <div class="mode-toggle">
+            <button class="mode-toggle-btn active" id="modeSingle" onclick="setMode('single')">Single Type</button>
+            <button class="mode-toggle-btn" id="modeAll" onclick="setMode('all')">Complete Set (All Types)</button>
+          </div>
+
+          <!-- Single type selector -->
+          <div id="singleTypeConfig">
+            <div class="form-group">
+              <label class="form-label">Question Type</label>
+              <select class="form-select" id="questionType">
+                <option value="emq">Extended Matching Question (EMQ)</option>
+                <option value="mcq">Multiple Choice Question (MCQ)</option>
+                <option value="essay">Essay Question</option>
+                <option value="saq">Short Answer Question (SAQ)</option>
+                <option value="case">Clinical Case Study</option>
+                <option value="morphology">Morphology Case</option>
+                <option value="hplc">HPLC Interpretation</option>
+                <option value="viva">Viva Question</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Number of Questions</label>
+              <div class="count-selector">
+                <button class="count-btn" onclick="adjustCount(-1)">-</button>
+                <span class="count-display" id="questionCount">3</span>
+                <button class="count-btn" onclick="adjustCount(1)">+</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- All types selector -->
+          <div id="allTypeConfig" style="display: none;">
+            <div class="form-group">
+              <label class="form-label">Select question types to generate</label>
+              <div class="type-grid" id="typeGrid">
+                <label class="type-checkbox selected" data-type="emq">
+                  <input type="checkbox" checked>
+                  <span class="check-icon">&#10003;</span>
+                  <span>EMQs</span>
+                </label>
+                <label class="type-checkbox selected" data-type="mcq">
+                  <input type="checkbox" checked>
+                  <span class="check-icon">&#10003;</span>
+                  <span>MCQs</span>
+                </label>
+                <label class="type-checkbox selected" data-type="essay">
+                  <input type="checkbox" checked>
+                  <span class="check-icon">&#10003;</span>
+                  <span>Essays</span>
+                </label>
+                <label class="type-checkbox selected" data-type="saq">
+                  <input type="checkbox" checked>
+                  <span class="check-icon">&#10003;</span>
+                  <span>SAQs</span>
+                </label>
+                <label class="type-checkbox selected" data-type="case">
+                  <input type="checkbox" checked>
+                  <span class="check-icon">&#10003;</span>
+                  <span>Clinical Cases</span>
+                </label>
+                <label class="type-checkbox selected" data-type="morphology">
+                  <input type="checkbox" checked>
+                  <span class="check-icon">&#10003;</span>
+                  <span>Morphology</span>
+                </label>
+                <label class="type-checkbox selected" data-type="hplc">
+                  <input type="checkbox" checked>
+                  <span class="check-icon">&#10003;</span>
+                  <span>HPLC</span>
+                </label>
+                <label class="type-checkbox selected" data-type="viva">
+                  <input type="checkbox" checked>
+                  <span class="check-icon">&#10003;</span>
+                  <span>Viva</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Questions per type</label>
+              <div class="count-selector">
+                <button class="count-btn" onclick="adjustAllCount(-1)">-</button>
+                <span class="count-display" id="allQuestionCount">2</span>
+                <button class="count-btn" onclick="adjustAllCount(1)">+</button>
+              </div>
+            </div>
+            <div class="all-types-info" id="allTypesInfo">
+              <strong>Will generate:</strong> 2 EMQs + 2 MCQs + 2 Essays + 2 SAQs + 2 Cases + 2 Morphology + 2 HPLC + 2 Viva = <strong>16 questions total</strong>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Difficulty Level</label>
+            <select class="form-select" id="difficulty">
+              <option value="foundation">Foundation (ST3-4)</option>
+              <option value="intermediate">Intermediate (ST5-6)</option>
+              <option value="advanced">Advanced (ST7 / Consultant)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Clinical Domain (Optional)</label>
+            <select class="form-select" id="clinicalDomain">
+              <option value="">Auto-detect from source</option>
+              <option value="anaemia">Anaemia & Iron Metabolism</option>
+              <option value="haemoglobinopathy">Haemoglobinopathies</option>
+              <option value="coagulation">Coagulation & Haemostasis</option>
+              <option value="thrombosis">Thrombosis & Thrombophilia</option>
+              <option value="transfusion">Transfusion Medicine</option>
+              <option value="malignant">Malignant Haematology</option>
+              <option value="morphology_domain">Blood Film Morphology</option>
+              <option value="bonemarrow">Bone Marrow Assessment</option>
+              <option value="platelet">Platelet Disorders</option>
+              <option value="redcell">Red Cell Disorders</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Additional Instructions (Optional)</label>
+            <textarea class="form-textarea" id="additionalInstructions" placeholder="Focus on specific topics, include certain scenarios, etc." style="min-height: 80px;"></textarea>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-primary" id="generateBtn" onclick="handleGenerate()">
+              Generate Questions
+            </button>
+            <button class="btn btn-secondary" id="promptBtn" onclick="generatePromptOnly()">Copy as Prompt</button>
+            <button class="btn btn-secondary" onclick="clearAll()">Clear All</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column - Output -->
+      <div>
+        <div class="output-container">
+          <div class="output-header">
+            <h3>Generated Questions <span class="card-tag">Step 3</span></h3>
+            <div class="output-actions">
+              <button class="btn btn-small btn-secondary" id="stopBtn" onclick="stopGeneration()" style="display:none;">Stop</button>
+              <button class="btn btn-small btn-teal" id="copyBtn" onclick="copyOutput()">Copy</button>
+              <button class="btn btn-small btn-gold" id="downloadBtn" onclick="downloadOutput()">Download .md</button>
+            </div>
+          </div>
+          <div id="progressArea" style="display:none; padding: 16px 20px 0;">
+            <div class="progress-bar"><div class="progress-bar-fill" id="progressFill"></div></div>
+            <div class="gen-status" id="genStatus"><div class="spinner"></div><span>Preparing...</span></div>
+          </div>
+          <div class="output-body" id="outputBody">
+            <div class="output-placeholder">
+              <div class="output-placeholder-icon">🩸</div>
+              <div>Your questions will appear here</div>
+              <div style="font-size: 0.85rem; margin-top: 8px;">Add sources, configure settings, and click "Generate Questions"</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout info" style="margin-top: 20px;">
+          <strong>About</strong>
+          <p>Questions are generated following BSH, ISTH, NICE, and UK clinical guidelines. Each question includes detailed model answers, clinical pearls, and guideline references. #BloodDoctor</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div>Blood🩸Doctor | Dr Abdul Mannan FRCPath FCPS | #BloodDoctor</div>
+    <div>Framework v2.0 | Powered by Claude AI</div>
+  </footer>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ============================================
+    // INITIALIZATION
+    // ============================================
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // State
+    let uploadedFiles = [];
+    let addedUrls = [];
+    let extractedContent = '';
+    let generatedOutput = '';
+    let rawMarkdown = '';
+    let questionCount = 3;
+    let allQuestionCount = 2;
+    let currentMode = 'single'; // 'single' or 'all'
+    let isGenerating = false;
+    let abortController = null;
+
+    // Load saved API key on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      updateApiStatus();
+      setupTypeCheckboxes();
+    });
+
+    // ============================================
+    // API KEY MANAGEMENT
+    // ============================================
+    function openApiModal() {
+      const modal = document.getElementById('apiModal');
+      const input = document.getElementById('apiKeyInput');
+      const saved = localStorage.getItem('claude_api_key');
+      if (saved) input.value = saved;
+      const savedModel = localStorage.getItem('claude_model');
+      if (savedModel) document.getElementById('modelSelect').value = savedModel;
+      modal.classList.add('visible');
+    }
+
+    function closeApiModal() {
+      document.getElementById('apiModal').classList.remove('visible');
+    }
+
+    function saveApiKey() {
+      const key = document.getElementById('apiKeyInput').value.trim();
+      const model = document.getElementById('modelSelect').value;
+      if (!key) {
+        showToast('Please enter an API key', 'error');
+        return;
+      }
+      localStorage.setItem('claude_api_key', key);
+      localStorage.setItem('claude_model', model);
+      updateApiStatus();
+      closeApiModal();
+      showToast('API key saved', 'success');
+    }
+
+    function clearApiKey() {
+      localStorage.removeItem('claude_api_key');
+      localStorage.removeItem('claude_model');
+      document.getElementById('apiKeyInput').value = '';
+      updateApiStatus();
+      closeApiModal();
+      showToast('API key removed', 'success');
+    }
+
+    function updateApiStatus() {
+      const btn = document.getElementById('apiStatusBtn');
+      const text = document.getElementById('apiStatusText');
+      const key = localStorage.getItem('claude_api_key');
+      if (key) {
+        btn.className = 'api-status connected';
+        text.textContent = 'API Connected';
+      } else {
+        btn.className = 'api-status disconnected';
+        text.textContent = 'Set API Key';
+      }
+    }
+
+    function getApiKey() { return localStorage.getItem('claude_api_key'); }
+    function getModel() { return localStorage.getItem('claude_model') || 'claude-sonnet-4-20250514'; }
+
+    // ============================================
+    // MODE TOGGLE
+    // ============================================
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('modeSingle').classList.toggle('active', mode === 'single');
+      document.getElementById('modeAll').classList.toggle('active', mode === 'all');
+      document.getElementById('singleTypeConfig').style.display = mode === 'single' ? 'block' : 'none';
+      document.getElementById('allTypeConfig').style.display = mode === 'all' ? 'block' : 'none';
+    }
+
+    // ============================================
+    // TYPE CHECKBOXES
+    // ============================================
+    function setupTypeCheckboxes() {
+      document.querySelectorAll('.type-checkbox').forEach(label => {
+        label.addEventListener('click', (e) => {
+          e.preventDefault();
+          const input = label.querySelector('input');
+          input.checked = !input.checked;
+          label.classList.toggle('selected', input.checked);
+          updateAllTypesInfo();
+        });
+      });
+    }
+
+    function getSelectedTypes() {
+      const selected = [];
+      document.querySelectorAll('.type-checkbox').forEach(label => {
+        if (label.querySelector('input').checked) {
+          selected.push(label.dataset.type);
+        }
+      });
+      return selected;
+    }
+
+    function updateAllTypesInfo() {
+      const types = getSelectedTypes();
+      const total = types.length * allQuestionCount;
+      const typeNames = {
+        emq: 'EMQs', mcq: 'MCQs', essay: 'Essays', saq: 'SAQs',
+        case: 'Cases', morphology: 'Morphology', hplc: 'HPLC', viva: 'Viva'
+      };
+      const parts = types.map(t => `${allQuestionCount} ${typeNames[t]}`).join(' + ');
+      document.getElementById('allTypesInfo').innerHTML =
+        `<strong>Will generate:</strong> ${parts} = <strong>${total} questions total</strong>`;
+    }
+
+    function adjustAllCount(delta) {
+      allQuestionCount = Math.max(1, Math.min(5, allQuestionCount + delta));
+      document.getElementById('allQuestionCount').textContent = allQuestionCount;
+      updateAllTypesInfo();
+    }
+
+    // ============================================
+    // FILE UPLOAD
+    // ============================================
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      handleFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+    async function handleFiles(files) {
+      for (const file of files) {
+        if (!uploadedFiles.find(f => f.name === file.name)) {
+          uploadedFiles.push(file);
+          await extractFileContent(file);
+        }
+      }
+      updateFileList();
+      updateSteps();
+    }
+
+    async function extractFileContent(file) {
+      const type = file.type;
+      const name = file.name.toLowerCase();
+      let content = '';
+
+      try {
+        if (type === 'application/pdf' || name.endsWith('.pdf')) {
+          content = await extractPdfContent(file);
+        } else if (type.includes('word') || name.endsWith('.docx') || name.endsWith('.doc')) {
+          content = await extractWordContent(file);
+        } else if (type.includes('presentation') || name.endsWith('.pptx') || name.endsWith('.ppt')) {
+          content = await extractPptxContent(file);
+        } else if (type.includes('sheet') || name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) {
+          content = await extractExcelContent(file);
+        } else if (type.startsWith('image/')) {
+          content = `[IMAGE FILE: ${file.name} - binary image data included]\n[This is an image file. Please describe any relevant visual content for question generation.]`;
+        } else if (type === 'text/html' || name.endsWith('.html') || name.endsWith('.htm')) {
+          const raw = await file.text();
+          const doc = new DOMParser().parseFromString(raw, 'text/html');
+          content = doc.body.innerText || doc.body.textContent;
+        } else if (type === 'text/plain' || name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.rtf')) {
+          content = await file.text();
+        } else {
+          // Try reading as text for unknown formats
+          try {
+            content = await file.text();
+          } catch (e) {
+            content = `[FILE: ${file.name} - could not extract text content]`;
+          }
+        }
+
+        if (content) {
+          extractedContent += `\n\n=== SOURCE: ${file.name} ===\n${content}`;
+          updateSourcePreview();
+        }
+      } catch (error) {
+        console.error('Error extracting content:', error);
+        showToast('Error extracting content from ' + file.name, 'error');
+      }
+    }
+
+    async function extractPdfContent(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let text = '';
+      for (let i = 1; i <= Math.min(pdf.numPages, 100); i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const pageText = content.items.map(item => item.str).join(' ');
+        text += `\n[Page ${i}]\n${pageText}`;
+      }
+      return text;
+    }
+
+    async function extractWordContent(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value;
+    }
+
+    async function extractPptxContent(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      let text = '';
+      let slideNum = 1;
+
+      // PPTX files store slides in ppt/slides/slide{N}.xml
+      const slideFiles = Object.keys(zip.files)
+        .filter(f => f.match(/ppt\/slides\/slide\d+\.xml$/))
+        .sort((a, b) => {
+          const numA = parseInt(a.match(/slide(\d+)/)[1]);
+          const numB = parseInt(b.match(/slide(\d+)/)[1]);
+          return numA - numB;
+        });
+
+      for (const slidePath of slideFiles) {
+        const xml = await zip.files[slidePath].async('text');
+        // Parse XML and extract text from <a:t> elements
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml, 'text/xml');
+        const textNodes = doc.getElementsByTagName('a:t');
+        let slideText = '';
+        for (let i = 0; i < textNodes.length; i++) {
+          slideText += textNodes[i].textContent + ' ';
+        }
+        if (slideText.trim()) {
+          text += `\n[Slide ${slideNum}]\n${slideText.trim()}`;
+        }
+        slideNum++;
+      }
+
+      // Also extract from notes if present
+      const noteFiles = Object.keys(zip.files)
+        .filter(f => f.match(/ppt\/notesSlides\/notesSlide\d+\.xml$/));
+
+      for (const notePath of noteFiles) {
+        const xml = await zip.files[notePath].async('text');
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml, 'text/xml');
+        const textNodes = doc.getElementsByTagName('a:t');
+        let noteText = '';
+        for (let i = 0; i < textNodes.length; i++) {
+          noteText += textNodes[i].textContent + ' ';
+        }
+        if (noteText.trim()) {
+          text += `\n[Speaker Notes]\n${noteText.trim()}`;
+        }
+      }
+
+      return text || '[Could not extract text from PPTX - slides may contain only images]';
+    }
+
+    async function extractExcelContent(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      let text = '';
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        text += `\n[Sheet: ${sheetName}]\n`;
+        text += XLSX.utils.sheet_to_csv(sheet);
+      });
+      return text;
+    }
+
+    function updateFileList() {
+      const list = document.getElementById('fileList');
+      list.innerHTML = uploadedFiles.map((file, index) => `
+        <div class="file-chip">
+          <span>${getFileIcon(file.type, file.name)}</span>
+          <span>${file.name}</span>
+          <span class="file-chip-remove" onclick="removeFile(${index})">×</span>
+        </div>
+      `).join('');
+      uploadZone.classList.toggle('has-files', uploadedFiles.length > 0);
+    }
+
+    function getFileIcon(type, name) {
+      const n = (name || '').toLowerCase();
+      if (type.includes('pdf') || n.endsWith('.pdf')) return '📄';
+      if (type.includes('word') || n.endsWith('.docx') || n.endsWith('.doc')) return '📝';
+      if (type.includes('presentation') || n.endsWith('.pptx') || n.endsWith('.ppt')) return '📊';
+      if (type.includes('sheet') || type.includes('excel') || n.endsWith('.xlsx') || n.endsWith('.xls') || n.endsWith('.csv')) return '📈';
+      if (type.startsWith('image/')) return '🖼️';
+      if (n.endsWith('.html') || n.endsWith('.htm')) return '🌐';
+      return '📁';
+    }
+
+    function removeFile(index) {
+      uploadedFiles.splice(index, 1);
+      updateFileList();
+      rebuildExtractedContent();
+      updateSteps();
+    }
+
+    async function rebuildExtractedContent() {
+      extractedContent = '';
+      for (const file of uploadedFiles) {
+        await extractFileContent(file);
+      }
+    }
+
+    // ============================================
+    // URL MANAGEMENT
+    // ============================================
+    function addUrl() {
+      const input = document.getElementById('urlInput');
+      let url = input.value.trim();
+
+      if (!url) return;
+      if (!url.startsWith('http')) {
+        showToast('Please enter a valid URL starting with http(s)', 'error');
+        return;
+      }
+
+      if (!addedUrls.includes(url)) {
+        addedUrls.push(url);
+        updateUrlList();
+
+        const urlType = classifyUrl(url);
+        extractedContent += `\n\n=== SOURCE: ${urlType.label} ===\nURL: ${url}\n${urlType.instruction}`;
+        updateSourcePreview();
+        updateSteps();
+      }
+      input.value = '';
+    }
+
+    function classifyUrl(url) {
+      const u = url.toLowerCase();
+      if (u.includes('youtube.com') || u.includes('youtu.be'))
+        return { label: 'YouTube Video', icon: '🎬', instruction: '[YouTube video - extract transcript and key educational content for question generation]' };
+      if (u.includes('notion.so') || u.includes('notion.site'))
+        return { label: 'Notion Page', icon: '📓', instruction: '[Notion page - extract all content including tables, lists, and embedded data for question generation]' };
+      if (u.includes('docs.google.com/document'))
+        return { label: 'Google Doc', icon: '📄', instruction: '[Google Docs document - extract full text content for question generation]' };
+      if (u.includes('docs.google.com/presentation'))
+        return { label: 'Google Slides', icon: '📊', instruction: '[Google Slides presentation - extract all slide content and speaker notes for question generation]' };
+      if (u.includes('docs.google.com/spreadsheets'))
+        return { label: 'Google Sheets', icon: '📈', instruction: '[Google Sheets - extract data tables and content for question generation]' };
+      if (u.includes('drive.google.com'))
+        return { label: 'Google Drive', icon: '☁️', instruction: '[Google Drive file - access and extract content for question generation]' };
+      if (u.includes('onedrive.live.com') || u.includes('1drv.ms') || u.includes('sharepoint.com'))
+        return { label: 'Microsoft OneDrive/SharePoint', icon: '☁️', instruction: '[Microsoft cloud document - extract content for question generation]' };
+      if (u.includes('idrive.com'))
+        return { label: 'iDrive', icon: '☁️', instruction: '[iDrive file - extract content for question generation]' };
+      if (u.includes('dropbox.com'))
+        return { label: 'Dropbox', icon: '☁️', instruction: '[Dropbox file - extract content for question generation]' };
+      if (u.includes('pubmed.ncbi.nlm.nih.gov'))
+        return { label: 'PubMed Article', icon: '🔬', instruction: '[PubMed article - extract abstract, methods, results, and conclusions for question generation]' };
+      if (u.includes('biorxiv.org') || u.includes('medrxiv.org'))
+        return { label: 'Preprint', icon: '📰', instruction: '[Preprint - extract key findings and methodology for question generation]' };
+      return { label: 'Website', icon: '🔗', instruction: '[Website - extract relevant content for question generation]' };
+    }
+
+    function updateUrlList() {
+      const list = document.getElementById('urlList');
+      list.innerHTML = addedUrls.map((url, index) => {
+        const urlType = classifyUrl(url);
+        return `
+          <div class="url-chip">
+            <span>${urlType.icon}</span>
+            <span class="url-chip-text" title="${url}">${urlType.label}: ${url}</span>
+            <span class="file-chip-remove" onclick="removeUrl(${index})">×</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function removeUrl(index) {
+      addedUrls.splice(index, 1);
+      updateUrlList();
+      updateSteps();
+    }
+
+    function updateSourcePreview() {
+      const preview = document.getElementById('sourcePreview');
+      const content = document.getElementById('sourcePreviewContent');
+      const directText = document.getElementById('directText').value;
+      const fullContent = extractedContent + (directText ? `\n\n=== DIRECT INPUT ===\n${directText}` : '');
+
+      if (fullContent.trim()) {
+        preview.style.display = 'block';
+        content.textContent = fullContent.substring(0, 1500) + (fullContent.length > 1500 ? '\n... [content truncated in preview]' : '');
+      } else {
+        preview.style.display = 'none';
+      }
+    }
+
+    document.getElementById('directText').addEventListener('input', () => {
+      updateSourcePreview();
+      updateSteps();
+    });
+
+    // ============================================
+    // QUESTION COUNT
+    // ============================================
+    function adjustCount(delta) {
+      questionCount = Math.max(1, Math.min(10, questionCount + delta));
+      document.getElementById('questionCount').textContent = questionCount;
+    }
+
+    // ============================================
+    // STEP INDICATORS
+    // ============================================
+    function updateSteps() {
+      const hasSource = extractedContent.trim() || document.getElementById('directText').value.trim() || addedUrls.length > 0;
+      document.getElementById('step1').classList.toggle('completed', hasSource);
+      document.getElementById('step1').classList.toggle('active', !hasSource);
+      document.getElementById('step2').classList.toggle('active', hasSource);
+    }
+
+    // ============================================
+    // PROMPT BUILDER
+    // ============================================
+    function buildPrompt(qType, count) {
+      const directText = document.getElementById('directText').value.trim();
+      const fullContent = extractedContent + (directText ? `\n\n=== DIRECT INPUT ===\n${directText}` : '');
+      const difficulty = document.getElementById('difficulty').value;
+      const domain = document.getElementById('clinicalDomain').value;
+      const instructions = document.getElementById('additionalInstructions').value;
+
+      const typeNames = {
+        emq: 'Extended Matching Questions (EMQs)',
+        mcq: 'Multiple Choice Questions (MCQs)',
+        essay: 'Essay Questions',
+        saq: 'Short Answer Questions (SAQs)',
+        case: 'Clinical Case Studies',
+        morphology: 'Morphology Cases',
+        hplc: 'HPLC Interpretation Cases',
+        viva: 'Viva Questions'
+      };
+
+      const difficultyDesc = {
+        foundation: 'Foundation level (ST3-4 trainee) - testing core knowledge and common presentations',
+        intermediate: 'Intermediate level (ST5-6 trainee) - testing clinical application and reasoning',
+        advanced: 'Advanced level (ST7/Consultant) - testing complex scenarios and expert judgement'
+      };
+
+      return `# FRCPath Haematology Exam Question Generation Request
+
+## Task
+Generate **${count} complete ${typeNames[qType]}** for FRCPath haematology examination preparation.
+
+## Difficulty Level
+${difficultyDesc[difficulty]}
+
+${domain ? `## Clinical Domain Focus\n${domain}\n` : ''}
+
+## Source Material
+Please use the following content as the basis for generating exam questions:
+
+${fullContent}
+
+${addedUrls.length > 0 ? `\n## URLs to Reference\n${addedUrls.map(u => `- ${u}`).join('\n')}\n\nPlease access and use content from these URLs.\n` : ''}
+
+${instructions ? `## Additional Instructions\n${instructions}\n` : ''}
+
+## Output Requirements
+
+Please generate **${count}** complete, exam-ready questions with the following structure:
+
+${getTemplateForType(qType)}
+
+## Quality Standards
+1. All content must align with current BSH, ISTH, NICE, and UK guidelines
+2. Use UK medical terminology and spelling
+3. Include specific guideline references where relevant
+4. Ensure clinical accuracy and relevance to UK practice
+5. Test clinical reasoning, not just factual recall
+
+## Format
+- Use clear markdown formatting with proper headers
+- Include complete answers with detailed explanations
+- Add clinical pearls and learning points
+- Number each question clearly
+
+---
+
+#BloodDoctor
+
+Please generate the questions now.`;
+    }
+
+    function buildAllTypesPrompt() {
+      const directText = document.getElementById('directText').value.trim();
+      const fullContent = extractedContent + (directText ? `\n\n=== DIRECT INPUT ===\n${directText}` : '');
+      const difficulty = document.getElementById('difficulty').value;
+      const domain = document.getElementById('clinicalDomain').value;
+      const instructions = document.getElementById('additionalInstructions').value;
+      const selectedTypes = getSelectedTypes();
+
+      const typeNames = {
+        emq: 'Extended Matching Questions (EMQs)',
+        mcq: 'Multiple Choice Questions (MCQs)',
+        essay: 'Essay Questions',
+        saq: 'Short Answer Questions (SAQs)',
+        case: 'Clinical Case Studies',
+        morphology: 'Morphology Cases',
+        hplc: 'HPLC Interpretation Cases',
+        viva: 'Viva Questions'
+      };
+
+      const difficultyDesc = {
+        foundation: 'Foundation level (ST3-4 trainee) - testing core knowledge and common presentations',
+        intermediate: 'Intermediate level (ST5-6 trainee) - testing clinical application and reasoning',
+        advanced: 'Advanced level (ST7/Consultant) - testing complex scenarios and expert judgement'
+      };
+
+      let typeSections = selectedTypes.map(t =>
+        `### ${typeNames[t]} (${allQuestionCount} questions)\n${getTemplateForType(t)}`
+      ).join('\n\n');
+
+      return `# FRCPath Haematology Complete Exam Question Set
+
+## Task
+Generate a **complete set of exam questions** covering **${selectedTypes.length} question types** for FRCPath haematology examination preparation.
+
+For each type, generate **${allQuestionCount} questions**. Total: **${selectedTypes.length * allQuestionCount} questions**.
+
+## Difficulty Level
+${difficultyDesc[difficulty]}
+
+${domain ? `## Clinical Domain Focus\n${domain}\n` : ''}
+
+## Source Material
+Please use the following content as the basis for generating exam questions:
+
+${fullContent}
+
+${addedUrls.length > 0 ? `\n## URLs to Reference\n${addedUrls.map(u => `- ${u}`).join('\n')}\n\nPlease access and use content from these URLs.\n` : ''}
+
+${instructions ? `## Additional Instructions\n${instructions}\n` : ''}
+
+## Question Types and Structure
+
+Generate the following question types in this exact order. Use clear section headers (## Type Name) to separate each type.
+
+${typeSections}
+
+## Quality Standards
+1. All content must align with current BSH, ISTH, NICE, and UK guidelines
+2. Use UK medical terminology and spelling
+3. Include specific guideline references where relevant
+4. Ensure clinical accuracy and relevance to UK practice
+5. Test clinical reasoning, not just factual recall
+6. Vary the clinical scenarios across questions - do not repeat the same scenario
+
+## Format
+- Use clear markdown formatting with ## headers for each question type section
+- Number each question clearly within its section
+- Include complete answers with detailed explanations
+- Add clinical pearls and learning points
+
+---
+
+#BloodDoctor
+
+Please generate the complete question set now, starting with the first type.`;
+    }
+
+    function getTemplateForType(type) {
+      const templates = {
+        emq: `**EMQ Structure:**
+- Theme with clinical scenario (2-3 sentences)
+- 8-10 options (A-J)
+- 5 linked questions per theme
+- For each question: Correct answer, detailed rationale (100-150 words), why other options are wrong, clinical pearl
+- Guideline references`,
+
+        mcq: `**MCQ Structure (Single Best Answer):**
+- Clinical stem (2-4 sentences)
+- 5 options (A-E) with one correct answer
+- Correct answer with full explanation (120-150 words)
+- Analysis of each distractor
+- Key learning points
+- Guideline references`,
+
+        essay: `**Essay Structure (20 marks):**
+- Clear essay question
+- Model answer with:
+  - Introduction (2 marks, 80-120 words)
+  - Section 1 (5-6 marks, 200-250 words)
+  - Section 2 (5-6 marks, 200-250 words)
+  - Section 3 (4-5 marks, 150-200 words)
+  - Conclusion (2-3 marks, 100-120 words)
+- Marking guidance`,
+
+        saq: `**SAQ Structure:**
+- Clinical scenario
+- 4-5 short answer questions (2-4 marks each)
+- Model answers with key points
+- Marking scheme`,
+
+        case: `**Clinical Case Structure:**
+- Detailed patient presentation
+- Investigation results (tabulated)
+- Progressive questions (interpretation, differential, investigations, management)
+- Complete model answers with reasoning`,
+
+        morphology: `**Morphology Case Structure:**
+- Clinical context
+- Systematic description (RBCs, WBCs, platelets)
+- 3 significant findings with clinical interpretation
+- Differential diagnosis (ranked)
+- Confirmatory investigations
+- Clinical pearl`,
+
+        hplc: `**HPLC Interpretation Structure:**
+- Patient demographics and indication
+- HPLC results table with percentages
+- Red cell indices
+- Interpretation and pattern recognition
+- Differential diagnosis
+- Confirmatory tests
+- Clinical implications and counselling points`,
+
+        viva: `**Viva Question Structure:**
+- Opening question with expected answer
+- Follow-up questions (progressive difficulty)
+- Key points examiners look for
+- Common mistakes to avoid
+- Model answers at pass, good, and excellent levels`
+      };
+      return templates[type] || templates.mcq;
+    }
+
+    // ============================================
+    // GENERATION - CLAUDE API
+    // ============================================
+    async function handleGenerate() {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        openApiModal();
+        showToast('Please set your Claude API key first', 'error');
+        return;
+      }
+
+      const directText = document.getElementById('directText').value.trim();
+      const fullContent = extractedContent + (directText ? `\n\n=== DIRECT INPUT ===\n${directText}` : '');
+
+      if (!fullContent.trim() && addedUrls.length === 0) {
+        showToast('Please add source material first', 'error');
+        return;
+      }
+
+      let prompt;
+      if (currentMode === 'single') {
+        const qType = document.getElementById('questionType').value;
+        prompt = buildPrompt(qType, questionCount);
+      } else {
+        const selectedTypes = getSelectedTypes();
+        if (selectedTypes.length === 0) {
+          showToast('Please select at least one question type', 'error');
+          return;
+        }
+        prompt = buildAllTypesPrompt();
+      }
+
+      await generateWithClaude(prompt);
+    }
+
+    async function generateWithClaude(prompt) {
+      isGenerating = true;
+      rawMarkdown = '';
+      abortController = new AbortController();
+
+      // UI updates
+      const genBtn = document.getElementById('generateBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const progressArea = document.getElementById('progressArea');
+      const progressFill = document.getElementById('progressFill');
+      const genStatus = document.getElementById('genStatus');
+      const outputBody = document.getElementById('outputBody');
+
+      genBtn.disabled = true;
+      stopBtn.style.display = 'inline-flex';
+      progressArea.style.display = 'block';
+      progressFill.className = 'progress-bar-fill indeterminate';
+      genStatus.innerHTML = '<div class="spinner"></div><span>Connecting to Claude AI...</span>';
+      outputBody.innerHTML = '<div class="rendered-output streaming-cursor" id="streamContent"></div>';
+
+      // Update steps
+      document.getElementById('step2').classList.add('completed');
+      document.getElementById('step2').classList.remove('active');
+      document.getElementById('step3').classList.add('active');
+
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': getApiKey(),
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: getModel(),
+            max_tokens: 16000,
+            stream: true,
+            messages: [
+              {
+                role: 'user',
+                content: prompt
+              }
+            ],
+            system: `You are an expert FRCPath Haematology examiner and question writer. You create detailed, clinically accurate exam questions for UK haematology trainees preparing for the FRCPath examination.
+
+Your questions must:
+- Follow BSH (British Society for Haematology), ISTH, NICE, and NHSBT guidelines
+- Use UK medical terminology and spelling (e.g., haematology, haemoglobin, anaemia)
+- Include detailed model answers with clinical reasoning
+- Reference specific guidelines where appropriate
+- Test clinical reasoning, not just factual recall
+- Include clinical pearls and key learning points
+
+Format your output in clean Markdown with proper headers, lists, and tables where appropriate.
+
+Always end with: #BloodDoctor`
+          }),
+          signal: abortController.signal
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          let errorMsg = `API error: ${response.status}`;
+          try {
+            const errJson = JSON.parse(errorBody);
+            errorMsg = errJson.error?.message || errorMsg;
+          } catch(e) {}
+          throw new Error(errorMsg);
+        }
+
+        genStatus.innerHTML = '<div class="spinner"></div><span>Generating questions...</span>';
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') continue;
+
+              try {
+                const event = JSON.parse(data);
+
+                if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+                  rawMarkdown += event.delta.text;
+                  renderStreamedContent();
+                }
+
+                if (event.type === 'message_stop') {
+                  // Done
+                }
+
+                if (event.type === 'message_delta' && event.usage) {
+                  // Could show token usage
+                }
+              } catch (e) {
+                // Skip malformed events
+              }
+            }
+          }
+        }
+
+        // Finalize
+        progressFill.className = 'progress-bar-fill';
+        progressFill.style.width = '100%';
+        genStatus.innerHTML = '<span style="color: var(--teal);">Generation complete</span>';
+
+        // Final render without cursor
+        const streamEl = document.getElementById('streamContent');
+        if (streamEl) {
+          streamEl.classList.remove('streaming-cursor');
+          streamEl.innerHTML = marked.parse(rawMarkdown);
+        }
+
+        generatedOutput = rawMarkdown;
+        showToast('Questions generated successfully!', 'success');
+
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          genStatus.innerHTML = '<span style="color: var(--gold);">Generation stopped by user</span>';
+          generatedOutput = rawMarkdown;
+          showToast('Generation stopped', 'success');
+        } else {
+          genStatus.innerHTML = `<span style="color: var(--blood);">Error: ${error.message}</span>`;
+          showToast('Generation failed: ' + error.message, 'error');
+          console.error('Generation error:', error);
+        }
+      } finally {
+        isGenerating = false;
+        genBtn.disabled = false;
+        stopBtn.style.display = 'none';
+        progressFill.className = 'progress-bar-fill';
+        progressFill.style.width = '100%';
+        abortController = null;
+
+        // Final render
+        const streamEl = document.getElementById('streamContent');
+        if (streamEl) streamEl.classList.remove('streaming-cursor');
+      }
+    }
+
+    function renderStreamedContent() {
+      const el = document.getElementById('streamContent');
+      if (!el) return;
+      // Render partial markdown
+      try {
+        el.innerHTML = marked.parse(rawMarkdown);
+        // Auto-scroll to bottom
+        const outputBody = document.getElementById('outputBody');
+        outputBody.scrollTop = outputBody.scrollHeight;
+      } catch (e) {
+        el.textContent = rawMarkdown;
+      }
+    }
+
+    function stopGeneration() {
+      if (abortController) {
+        abortController.abort();
+      }
+    }
+
+    // ============================================
+    // PROMPT-ONLY MODE (legacy fallback)
+    // ============================================
+    function generatePromptOnly() {
+      const directText = document.getElementById('directText').value.trim();
+      const fullContent = extractedContent + (directText ? `\n\n=== DIRECT INPUT ===\n${directText}` : '');
+
+      if (!fullContent.trim() && addedUrls.length === 0) {
+        showToast('Please add source material first', 'error');
+        return;
+      }
+
+      let prompt;
+      if (currentMode === 'single') {
+        const qType = document.getElementById('questionType').value;
+        prompt = buildPrompt(qType, questionCount);
+      } else {
+        const selectedTypes = getSelectedTypes();
+        if (selectedTypes.length === 0) {
+          showToast('Please select at least one question type', 'error');
+          return;
+        }
+        prompt = buildAllTypesPrompt();
+      }
+
+      rawMarkdown = prompt;
+      generatedOutput = prompt;
+
+      document.getElementById('outputBody').innerHTML = `
+        <div class="prompt-output">${escapeHtml(prompt)}</div>
+      `;
+
+      document.getElementById('step2').classList.add('completed');
+      document.getElementById('step2').classList.remove('active');
+      document.getElementById('step3').classList.add('active');
+
+      navigator.clipboard.writeText(prompt).then(() => {
+        showToast('Prompt copied to clipboard!', 'success');
+      }).catch(() => {
+        showToast('Prompt generated - use Copy button to copy', 'success');
+      });
+    }
+
+    // ============================================
+    // OUTPUT ACTIONS
+    // ============================================
+    function copyOutput() {
+      const content = generatedOutput || rawMarkdown;
+      if (!content) {
+        showToast('Nothing to copy yet', 'error');
+        return;
+      }
+
+      navigator.clipboard.writeText(content).then(() => {
+        const btn = document.getElementById('copyBtn');
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.classList.add('copy-success');
+        showToast('Content copied to clipboard', 'success');
+        setTimeout(() => {
+          btn.textContent = orig;
+          btn.classList.remove('copy-success');
+        }, 2000);
+      });
+    }
+
+    function downloadOutput() {
+      const content = generatedOutput || rawMarkdown;
+      if (!content) {
+        showToast('Nothing to download yet', 'error');
+        return;
+      }
+
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
+      const filename = `BloodDoctor_FRCPath_Questions_${dateStr}_${timeStr}.md`;
+
+      const blob = new Blob([content], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast('Downloaded: ' + filename, 'success');
+    }
+
+    // ============================================
+    // UTILITY
+    // ============================================
+    function clearAll() {
+      uploadedFiles = [];
+      addedUrls = [];
+      extractedContent = '';
+      generatedOutput = '';
+      rawMarkdown = '';
+
+      updateFileList();
+      updateUrlList();
+      document.getElementById('directText').value = '';
+      document.getElementById('additionalInstructions').value = '';
+      document.getElementById('sourcePreview').style.display = 'none';
+      document.getElementById('progressArea').style.display = 'none';
+      document.getElementById('outputBody').innerHTML = `
+        <div class="output-placeholder">
+          <div class="output-placeholder-icon">🩸</div>
+          <div>Your questions will appear here</div>
+          <div style="font-size: 0.85rem; margin-top: 8px;">Add sources, configure settings, and click "Generate Questions"</div>
+        </div>
+      `;
+
+      // Reset steps
+      document.getElementById('step1').classList.add('active');
+      document.getElementById('step1').classList.remove('completed');
+      document.getElementById('step2').classList.remove('active', 'completed');
+      document.getElementById('step3').classList.remove('active');
+
+      showToast('Cleared all inputs', 'success');
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function showToast(message, type = '') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast show ' + type;
+      setTimeout(() => toast.className = 'toast', 3000);
+    }
+
+    // Enter key for URL input
+    document.getElementById('urlInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addUrl(); }
+    });
+  </script>
+</body>
+</html>
