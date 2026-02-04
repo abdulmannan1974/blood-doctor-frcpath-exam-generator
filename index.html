@@ -847,6 +847,21 @@
               <span class="source-badge">OneDrive</span>
             </div>
             <div class="url-list" id="urlList"></div>
+            <!-- YouTube transcript paste helper (shown when YouTube extraction fails) -->
+            <div id="ytTranscriptHelper" style="display:none; margin-top: 10px; padding: 14px; background: #fffbf0; border: 1px solid #e8d5a3; border-radius: 12px; font-size: 0.82rem;">
+              <div style="font-weight: 600; color: #8b6914; margin-bottom: 8px;">💡 YouTube Transcript Tip</div>
+              <div style="color: #5c4a1e; line-height: 1.5; margin-bottom: 10px;">
+                YouTube restricts automated transcript access. To get the full transcript:
+                <ol style="margin: 6px 0 6px 18px; padding: 0;">
+                  <li>Open the YouTube video in your browser</li>
+                  <li>Click <b>⋯ More</b> below the video → <b>Show transcript</b></li>
+                  <li>Select all transcript text and <b>copy</b> it</li>
+                  <li>Paste it in the <b>Text Input</b> box below</li>
+                </ol>
+                The video title and description have been captured and will help guide question generation.
+              </div>
+              <button class="btn btn-small btn-secondary" onclick="document.getElementById('ytTranscriptHelper').style.display='none'" style="font-size: 0.75rem;">Dismiss</button>
+            </div>
           </div>
 
           <!-- Direct Text Input -->
@@ -1381,15 +1396,28 @@
       url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
     ];
 
-    async function fetchWithProxy(url) {
+    async function fetchWithProxy(url, options = {}) {
+      const timeout = options.timeout || 15000;
+      const errors = [];
       for (const proxyFn of CORS_PROXIES) {
         try {
           const proxyUrl = proxyFn(url);
-          const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
-          if (resp.ok) return await resp.text();
-        } catch (e) { /* try next proxy */ }
+          const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(timeout) });
+          if (resp.ok) {
+            const text = await resp.text();
+            // Check for proxy error pages
+            if (text.length < 300 && (text.includes('500 Internal Server Error') || text.includes('502 Bad Gateway') || text.includes('error code:'))) {
+              errors.push(`Proxy returned error`);
+              continue;
+            }
+            return text;
+          }
+          errors.push(`HTTP ${resp.status}`);
+        } catch (e) {
+          errors.push(e.message || 'Unknown error');
+        }
       }
-      throw new Error('All proxies failed');
+      throw new Error(`All proxies failed: ${errors.join(', ')}`);
     }
 
     async function addUrl() {
@@ -1417,8 +1445,9 @@
       try {
         let content = '';
         const u = url.toLowerCase();
+        const isYouTube = u.includes('youtube.com') || u.includes('youtu.be');
 
-        if (u.includes('youtube.com') || u.includes('youtu.be')) {
+        if (isYouTube) {
           content = await extractYouTubeTranscript(url);
         } else if (u.includes('docs.google.com/document')) {
           content = await extractGoogleDoc(url);
@@ -1433,8 +1462,18 @@
         if (content && content.trim().length > 50) {
           extractedContent += `\n\n=== SOURCE: ${urlType.label} (${url}) ===\n${content}`;
           updateSourcePreview();
-          updateUrlListWithStatus(addedUrls.indexOf(url), 'done');
-          showToast(`Extracted ${content.length} characters from ${urlType.label}`, 'success');
+
+          // Check if YouTube extraction got transcript or just metadata
+          const hasTranscript = content.includes('--- TRANSCRIPT ---');
+          if (isYouTube && !hasTranscript) {
+            updateUrlListWithStatus(addedUrls.indexOf(url), 'partial');
+            showToast(`Video metadata captured. For best results, paste the YouTube transcript in the text box.`, 'error');
+            // Show the YouTube transcript paste helper
+            document.getElementById('ytTranscriptHelper').style.display = 'block';
+          } else {
+            updateUrlListWithStatus(addedUrls.indexOf(url), 'done');
+            showToast(`Extracted ${content.length} characters from ${urlType.label}`, 'success');
+          }
         } else {
           extractedContent += `\n\n=== SOURCE: ${urlType.label} ===\nURL: ${url}\n[Content could not be fully extracted. The URL is included for reference.]`;
           updateUrlListWithStatus(addedUrls.indexOf(url), 'partial');
@@ -1455,6 +1494,8 @@
     // YOUTUBE TRANSCRIPT EXTRACTION
     // ============================================
     function extractVideoId(url) {
+      // Strip tracking params like ?si=...
+      url = url.split('?si=')[0].split('&si=')[0];
       const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
         /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/
@@ -1463,109 +1504,193 @@
         const m = url.match(p);
         if (m) return m[1];
       }
+      // Try extracting from full URL with multiple params
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+      const v = urlObj.searchParams.get('v');
+      if (v && v.length === 11) return v;
       return null;
     }
 
     async function extractYouTubeTranscript(url) {
       const videoId = extractVideoId(url);
-      if (!videoId) throw new Error('Could not extract video ID');
+      if (!videoId) throw new Error('Could not extract video ID from URL');
 
-      // Method 1: Try Innertube API via CORS proxy
+      console.log(`[YouTube] Extracting transcript for video: ${videoId}`);
+
+      // Step 1: Get video metadata via oEmbed (always works, no CORS issues)
+      let title = 'YouTube Video';
+      let channelName = '';
       try {
-        const html = await fetchWithProxy(`https://www.youtube.com/watch?v=${videoId}`);
+        const oembedUrl = `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`;
+        const oembedResp = await fetch(oembedUrl, { signal: AbortSignal.timeout(8000) });
+        if (oembedResp.ok) {
+          const oembedData = await oembedResp.json();
+          title = oembedData.title || title;
+          channelName = oembedData.author_name || '';
+          console.log(`[YouTube] Video: "${title}" by ${channelName}`);
+        }
+      } catch (e) {
+        console.log('[YouTube] oEmbed failed, continuing...');
+      }
 
-        // Extract video title
-        const titleMatch = html.match(/<title>(.+?)<\/title>/);
-        const title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : 'YouTube Video';
+      // Step 2: Try to get transcript from YouTube page via CORS proxies
+      let transcript = null;
+      let description = '';
+      let chapters = [];
 
-        // Try to get captions from the page data
-        const captionTrackMatch = html.match(/"captionTracks":\s*(\[.*?\])/);
+      try {
+        const html = await fetchWithProxy(`https://www.youtube.com/watch?v=${videoId}`, { timeout: 20000 });
+        console.log(`[YouTube] Fetched page: ${html.length} chars`);
+
+        // Extract title from page if we don't have it
+        if (title === 'YouTube Video') {
+          const titleMatch = html.match(/<title>(.+?)<\/title>/);
+          if (titleMatch) title = titleMatch[1].replace(' - YouTube', '').trim();
+        }
+
+        // Try to extract captionTracks (works when CORS proxy preserves full page)
+        const captionTrackMatch = html.match(/"captionTracks":\s*(\[.*?\])\s*,\s*"/);
         if (captionTrackMatch) {
+          console.log('[YouTube] Found captionTracks in page HTML!');
           try {
-            const tracks = JSON.parse(captionTrackMatch[1]);
-            // Prefer English
-            const enTrack = tracks.find(t => t.languageCode === 'en' || t.languageCode?.startsWith('en'))
+            const rawTracks = captionTrackMatch[1].replace(/\\u0026/g, '&');
+            const tracks = JSON.parse(rawTracks);
+            // Prefer English manual > English auto > any
+            const enTrack = tracks.find(t => t.languageCode === 'en' && t.kind !== 'asr')
+                         || tracks.find(t => t.languageCode?.startsWith('en'))
                          || tracks[0];
 
             if (enTrack && enTrack.baseUrl) {
-              const xmlText = await fetchWithProxy(enTrack.baseUrl);
-              const transcript = parseTranscriptXml(xmlText);
-              if (transcript) {
-                return `[YouTube Video: ${title}]\n[Video ID: ${videoId}]\n[Language: ${enTrack.languageCode || 'auto'}]\n\n--- TRANSCRIPT ---\n\n${transcript}`;
+              try {
+                const captionUrl = enTrack.baseUrl.replace(/\\u0026/g, '&');
+                const xmlText = await fetchWithProxy(captionUrl);
+                transcript = parseTranscriptXml(xmlText);
+                if (transcript) {
+                  console.log(`[YouTube] Got transcript from captionTracks: ${transcript.length} chars`);
+                }
+              } catch (e) {
+                console.log('[YouTube] Failed to fetch caption URL:', e.message);
               }
             }
-          } catch (e) { /* try next method */ }
+          } catch (e) {
+            console.log('[YouTube] Failed to parse captionTracks:', e.message);
+          }
         }
 
-        // Method 2: Try extracting from timedtext API directly
-        try {
-          const timedTextUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=srv3`;
-          const xmlText = await fetchWithProxy(timedTextUrl);
-          const transcript = parseTranscriptXml(xmlText);
-          if (transcript) {
-            return `[YouTube Video: ${title}]\n[Video ID: ${videoId}]\n\n--- TRANSCRIPT ---\n\n${transcript}`;
+        // Try unsigned timedtext endpoints (sometimes work for public videos)
+        if (!transcript) {
+          const timedtextUrls = [
+            `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=srv3`,
+            `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&kind=asr&fmt=srv3`,
+            `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en`,
+            `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&kind=asr`
+          ];
+          for (const ttUrl of timedtextUrls) {
+            try {
+              const xmlText = await fetchWithProxy(ttUrl, { timeout: 8000 });
+              if (xmlText && xmlText.length > 50) {
+                transcript = parseTranscriptXml(xmlText);
+                if (transcript) {
+                  console.log(`[YouTube] Got transcript from timedtext API: ${transcript.length} chars`);
+                  break;
+                }
+              }
+            } catch (e) { /* try next */ }
           }
-        } catch (e) { /* try next method */ }
+        }
 
-        // Method 3: Try auto-generated captions
+        // Extract description from ytInitialPlayerResponse
         try {
-          const timedTextUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&kind=asr&fmt=srv3`;
-          const xmlText = await fetchWithProxy(timedTextUrl);
-          const transcript = parseTranscriptXml(xmlText);
-          if (transcript) {
-            return `[YouTube Video: ${title}]\n[Video ID: ${videoId}]\n[Auto-generated captions]\n\n--- TRANSCRIPT ---\n\n${transcript}`;
+          const descMatch = html.match(/"shortDescription":\s*"((?:[^"\\]|\\.)*)"/);
+          if (descMatch) {
+            description = JSON.parse(`"${descMatch[1]}"`);
           }
-        } catch (e) { /* try next method */ }
-
-        // Method 4: Extract whatever text we can from the page HTML
-        const descMatch = html.match(/"shortDescription":\s*"(.*?)"/);
-        const description = descMatch ? JSON.parse(`"${descMatch[1]}"`) : '';
-
-        // Try to extract key content from initial player response
-        let pageContent = `[YouTube Video: ${title}]\n[Video ID: ${videoId}]\n`;
-        if (description) pageContent += `\n[Video Description]\n${description}\n`;
+        } catch (e) { /* ignore */ }
 
         // Extract chapters if available
-        const chaptersMatch = html.match(/"chapterRenderer".*?"title".*?"simpleText":"(.*?)"/g);
-        if (chaptersMatch && chaptersMatch.length > 0) {
-          pageContent += '\n[Chapters]\n';
-          chaptersMatch.forEach(ch => {
-            const t = ch.match(/"simpleText":"(.*?)"/);
-            if (t) pageContent += `- ${t[1]}\n`;
-          });
-        }
+        try {
+          const chaptersMatch = html.match(/"chapterRenderer".*?"title".*?"simpleText":"(.*?)"/g);
+          if (chaptersMatch) {
+            chapters = chaptersMatch.map(ch => {
+              const t = ch.match(/"simpleText":"(.*?)"/);
+              return t ? t[1] : null;
+            }).filter(Boolean);
+          }
+        } catch (e) { /* ignore */ }
 
-        if (pageContent.length > 200) return pageContent;
-
-        throw new Error('No transcript or captions available for this video');
       } catch (err) {
-        throw new Error(`YouTube extraction failed: ${err.message}`);
+        console.log('[YouTube] CORS proxy page fetch failed:', err.message);
       }
+
+      // Step 3: Build the best possible content
+      let content = `[YouTube Video: ${title}]\n[Video ID: ${videoId}]\n[URL: https://www.youtube.com/watch?v=${videoId}]\n`;
+      if (channelName) content += `[Channel: ${channelName}]\n`;
+
+      if (transcript) {
+        // We got a transcript - best case!
+        content += `[Transcript extracted successfully]\n\n--- TRANSCRIPT ---\n\n${transcript}`;
+        return content;
+      }
+
+      // No transcript available - build rich metadata for Claude
+      console.log('[YouTube] No transcript available. Building metadata-based content.');
+      content += `\n[NOTE: Full transcript could not be extracted due to YouTube restrictions. Below is all available metadata about this video. Please generate questions based on the topic indicated by the title and description.]\n`;
+
+      if (description) {
+        content += `\n--- VIDEO DESCRIPTION ---\n${description}\n`;
+      }
+
+      if (chapters.length > 0) {
+        content += `\n--- CHAPTERS ---\n`;
+        chapters.forEach(ch => content += `- ${ch}\n`);
+      }
+
+      // Add helpful context for Claude
+      content += `\n--- INSTRUCTIONS FOR QUESTION GENERATION ---\n`;
+      content += `The video "${title}" is from the channel "${channelName}". `;
+      content += `Based on the title, description, and chapter information above, please generate FRCPath Haematology exam questions on the specific topics covered in this video. `;
+      content += `Focus on the clinical/scientific content implied by the video metadata.\n`;
+
+      // If we have very little content, at least provide the topic
+      if (content.length < 300) {
+        content += `\nPlease generate exam questions about: ${title}\n`;
+      }
+
+      return content;
     }
 
     function parseTranscriptXml(xml) {
       if (!xml || xml.length < 20) return null;
+
+      // Check if it's actually XML
+      if (!xml.trim().startsWith('<?xml') && !xml.trim().startsWith('<')) return null;
+
       const parser = new DOMParser();
       const doc = parser.parseFromString(xml, 'text/xml');
+
+      // Check for parse errors
+      if (doc.querySelector('parsererror')) return null;
 
       // Try <text> elements (YouTube timedtext format)
       let textNodes = doc.querySelectorAll('text');
       if (textNodes.length === 0) textNodes = doc.querySelectorAll('p');
       if (textNodes.length === 0) {
-        // Try body > * approach
-        const body = doc.querySelector('body, transcript');
-        if (body) {
-          textNodes = body.children;
+        // Try body > * or transcript > * approach
+        const container = doc.querySelector('body, transcript, timedtext');
+        if (container) {
+          textNodes = container.children;
         }
       }
 
       if (textNodes.length === 0) return null;
 
       const lines = [];
-      let lastTimestamp = '';
       textNodes.forEach((node, i) => {
         let text = (node.textContent || '').trim();
-        text = text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+        // Decode HTML entities
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = text;
+        text = textarea.value;
         if (!text) return;
 
         const start = node.getAttribute('start') || node.getAttribute('t');
@@ -1574,8 +1699,7 @@
           if (!isNaN(secs)) {
             const mins = Math.floor(secs / 60);
             const s = Math.floor(secs % 60);
-            lastTimestamp = `[${mins}:${s.toString().padStart(2, '0')}]`;
-            lines.push(`\n${lastTimestamp}`);
+            lines.push(`\n[${mins}:${s.toString().padStart(2, '0')}]`);
           }
         }
         lines.push(text);
@@ -1672,36 +1796,76 @@
     // GENERAL WEBPAGE EXTRACTION
     // ============================================
     async function extractWebpage(url) {
-      const html = await fetchWithProxy(url);
+      let html;
+      try {
+        html = await fetchWithProxy(url);
+      } catch (err) {
+        throw new Error(`Could not fetch page (${err.message}). The site may be down or blocking automated access.`);
+      }
+
       const doc = new DOMParser().parseFromString(html, 'text/html');
+      const title = doc.querySelector('title')?.textContent?.trim() || '';
 
-      // Remove non-content elements
-      const removeTags = ['script', 'style', 'nav', 'footer', 'header', 'iframe', 'noscript', 'svg', 'form'];
-      removeTags.forEach(tag => {
-        doc.querySelectorAll(tag).forEach(el => el.remove());
-      });
+      // Detect error pages (503, 404, etc.)
+      const errorPatterns = [
+        /503\s*Service\s*Unavailable/i,
+        /502\s*Bad\s*Gateway/i,
+        /504\s*Gateway\s*Timeout/i,
+        /404\s*(Not\s*Found|Page\s*Not\s*Found)/i,
+        /403\s*Forbidden/i,
+        /Access\s*Denied/i,
+        /Server\s*Error/i,
+        /Maintenance/i,
+        /temporarily\s*unable\s*to\s*service/i
+      ];
 
-      // Try to find main content area
-      const contentSelectors = ['article', 'main', '[role="main"]', '.content', '.post-content', '.entry-content', '#content', '.article-body'];
-      for (const sel of contentSelectors) {
-        const el = doc.querySelector(sel);
-        if (el && el.innerText && el.innerText.trim().length > 200) {
-          const title = doc.querySelector('title')?.textContent || '';
-          return `[Webpage: ${title}]\n[URL: ${url}]\n\n${el.innerText.trim()}`;
+      const bodyText = doc.body?.innerText || doc.body?.textContent || '';
+      const shortBody = bodyText.substring(0, 500);
+      for (const pattern of errorPatterns) {
+        if (pattern.test(title) || pattern.test(shortBody)) {
+          throw new Error(`Website returned an error page (${title || pattern.source}). The site may be down or under maintenance. Try again later.`);
         }
       }
 
-      // Fallback to body text
-      const bodyText = doc.body?.innerText || doc.body?.textContent || '';
-      const title = doc.querySelector('title')?.textContent || '';
+      // Check for CAPTCHA / bot detection pages
+      if (shortBody.match(/captcha|verify\s*you\s*are\s*human|robot\s*check|cloudflare/i)) {
+        throw new Error('Website is showing a CAPTCHA or bot detection page. Try accessing the site directly and copying the content.');
+      }
 
-      // Clean up excessive whitespace
+      // Remove non-content elements
+      const removeTags = ['script', 'style', 'nav', 'footer', 'header', 'iframe', 'noscript', 'svg', 'form', 'aside', '.sidebar', '.advertisement', '.ads', '.cookie-banner'];
+      removeTags.forEach(tag => {
+        try {
+          doc.querySelectorAll(tag).forEach(el => el.remove());
+        } catch (e) { /* invalid selector, skip */ }
+      });
+
+      // Try to find main content area
+      const contentSelectors = [
+        'article', 'main', '[role="main"]', '.content', '.post-content',
+        '.entry-content', '#content', '.article-body', '.post-body',
+        '.page-content', '.main-content', '#main-content', '.body-content',
+        '.text-content', '.article-text'
+      ];
+      for (const sel of contentSelectors) {
+        try {
+          const el = doc.querySelector(sel);
+          if (el) {
+            const text = el.innerText || el.textContent || '';
+            if (text.trim().length > 200) {
+              return `[Webpage: ${title}]\n[URL: ${url}]\n\n${text.trim().substring(0, 50000)}`;
+            }
+          }
+        } catch (e) { /* invalid selector, skip */ }
+      }
+
+      // Fallback to body text
       const cleaned = bodyText.replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim();
       if (cleaned.length > 100) {
         return `[Webpage: ${title}]\n[URL: ${url}]\n\n${cleaned.substring(0, 50000)}`;
       }
 
-      throw new Error('Could not extract meaningful content from this page');
+      throw new Error('Could not extract meaningful content from this page. The page may require login or JavaScript to display content.');
     }
 
     // ============================================
