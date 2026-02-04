@@ -712,6 +712,17 @@
     }
     .all-types-info strong { color: var(--ink); }
 
+    /* Extraction status */
+    .url-chip.extracting { background: #fff3e6; }
+    .url-chip.extracted { background: var(--teal-soft); }
+    .url-chip.failed { background: var(--rose); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .extracting-pulse { animation: pulse 1.5s infinite; }
+
     /* Responsive */
     @media (max-width: 600px) {
       .type-grid { grid-template-columns: 1fr; }
@@ -805,14 +816,15 @@
           <div class="upload-zone" id="uploadZone">
             <div class="upload-icon">📄</div>
             <div class="upload-text">Drop files here or click to upload</div>
-            <div class="upload-hint">PDF, Word, PowerPoint, Excel, Images, Text/Markdown</div>
-            <input type="file" class="file-input" id="fileInput" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.txt,.md,.html,.htm,.rtf">
+            <div class="upload-hint">PDF, Word, PowerPoint, Excel, Audio, Images, Text/Markdown</div>
+            <input type="file" class="file-input" id="fileInput" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.txt,.md,.html,.htm,.rtf,.mp3,.wav,.ogg,.m4a,.webm,.mp4,.flac,.aac,.wma">
           </div>
           <div class="source-badges">
             <span class="source-badge">PDF</span>
             <span class="source-badge">DOCX</span>
             <span class="source-badge">PPTX</span>
             <span class="source-badge">XLSX/CSV</span>
+            <span class="source-badge">🎵 Audio</span>
             <span class="source-badge">Images</span>
             <span class="source-badge">TXT/MD</span>
             <span class="source-badge">HTML</span>
@@ -1208,6 +1220,11 @@
           content = await extractPptxContent(file);
         } else if (type.includes('sheet') || name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) {
           content = await extractExcelContent(file);
+        } else if (type.startsWith('audio/') || type.startsWith('video/')
+                   || name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg')
+                   || name.endsWith('.m4a') || name.endsWith('.webm') || name.endsWith('.mp4')
+                   || name.endsWith('.flac') || name.endsWith('.aac') || name.endsWith('.wma')) {
+          content = await transcribeAudioFile(file);
         } else if (type.startsWith('image/')) {
           content = `[IMAGE FILE: ${file.name} - binary image data included]\n[This is an image file. Please describe any relevant visual content for question generation.]`;
         } else if (type === 'text/html' || name.endsWith('.html') || name.endsWith('.htm')) {
@@ -1356,9 +1373,26 @@
     }
 
     // ============================================
-    // URL MANAGEMENT
+    // URL MANAGEMENT - REAL CONTENT EXTRACTION
     // ============================================
-    function addUrl() {
+    const CORS_PROXIES = [
+      url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+      url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+    ];
+
+    async function fetchWithProxy(url) {
+      for (const proxyFn of CORS_PROXIES) {
+        try {
+          const proxyUrl = proxyFn(url);
+          const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+          if (resp.ok) return await resp.text();
+        } catch (e) { /* try next proxy */ }
+      }
+      throw new Error('All proxies failed');
+    }
+
+    async function addUrl() {
       const input = document.getElementById('urlInput');
       let url = input.value.trim();
 
@@ -1368,43 +1402,422 @@
         return;
       }
 
-      if (!addedUrls.includes(url)) {
-        addedUrls.push(url);
-        updateUrlList();
+      if (addedUrls.includes(url)) { input.value = ''; return; }
 
-        const urlType = classifyUrl(url);
-        extractedContent += `\n\n=== SOURCE: ${urlType.label} ===\nURL: ${url}\n${urlType.instruction}`;
-        updateSourcePreview();
-        updateSteps();
-      }
+      addedUrls.push(url);
+      updateUrlList();
       input.value = '';
+
+      const urlType = classifyUrl(url);
+      showToast(`Extracting content from ${urlType.label}...`, 'success');
+
+      // Update chip to show loading
+      updateUrlListWithStatus(addedUrls.length - 1, 'extracting');
+
+      try {
+        let content = '';
+        const u = url.toLowerCase();
+
+        if (u.includes('youtube.com') || u.includes('youtu.be')) {
+          content = await extractYouTubeTranscript(url);
+        } else if (u.includes('docs.google.com/document')) {
+          content = await extractGoogleDoc(url);
+        } else if (u.includes('docs.google.com/presentation')) {
+          content = await extractGoogleSlides(url);
+        } else if (u.includes('docs.google.com/spreadsheets')) {
+          content = await extractGoogleSheets(url);
+        } else {
+          content = await extractWebpage(url);
+        }
+
+        if (content && content.trim().length > 50) {
+          extractedContent += `\n\n=== SOURCE: ${urlType.label} (${url}) ===\n${content}`;
+          updateSourcePreview();
+          updateUrlListWithStatus(addedUrls.indexOf(url), 'done');
+          showToast(`Extracted ${content.length} characters from ${urlType.label}`, 'success');
+        } else {
+          extractedContent += `\n\n=== SOURCE: ${urlType.label} ===\nURL: ${url}\n[Content could not be fully extracted. The URL is included for reference.]`;
+          updateUrlListWithStatus(addedUrls.indexOf(url), 'partial');
+          showToast(`Limited content extracted from ${urlType.label}. URL added for reference.`, 'error');
+        }
+      } catch (err) {
+        console.error('URL extraction error:', err);
+        extractedContent += `\n\n=== SOURCE: ${urlType.label} ===\nURL: ${url}\n[Extraction failed: ${err.message}. The URL is included for reference.]`;
+        updateUrlListWithStatus(addedUrls.indexOf(url), 'failed');
+        showToast(`Could not extract from ${urlType.label}: ${err.message}`, 'error');
+      }
+
+      updateSourcePreview();
+      updateSteps();
+    }
+
+    // ============================================
+    // YOUTUBE TRANSCRIPT EXTRACTION
+    // ============================================
+    function extractVideoId(url) {
+      const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+        /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/
+      ];
+      for (const p of patterns) {
+        const m = url.match(p);
+        if (m) return m[1];
+      }
+      return null;
+    }
+
+    async function extractYouTubeTranscript(url) {
+      const videoId = extractVideoId(url);
+      if (!videoId) throw new Error('Could not extract video ID');
+
+      // Method 1: Try Innertube API via CORS proxy
+      try {
+        const html = await fetchWithProxy(`https://www.youtube.com/watch?v=${videoId}`);
+
+        // Extract video title
+        const titleMatch = html.match(/<title>(.+?)<\/title>/);
+        const title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : 'YouTube Video';
+
+        // Try to get captions from the page data
+        const captionTrackMatch = html.match(/"captionTracks":\s*(\[.*?\])/);
+        if (captionTrackMatch) {
+          try {
+            const tracks = JSON.parse(captionTrackMatch[1]);
+            // Prefer English
+            const enTrack = tracks.find(t => t.languageCode === 'en' || t.languageCode?.startsWith('en'))
+                         || tracks[0];
+
+            if (enTrack && enTrack.baseUrl) {
+              const xmlText = await fetchWithProxy(enTrack.baseUrl);
+              const transcript = parseTranscriptXml(xmlText);
+              if (transcript) {
+                return `[YouTube Video: ${title}]\n[Video ID: ${videoId}]\n[Language: ${enTrack.languageCode || 'auto'}]\n\n--- TRANSCRIPT ---\n\n${transcript}`;
+              }
+            }
+          } catch (e) { /* try next method */ }
+        }
+
+        // Method 2: Try extracting from timedtext API directly
+        try {
+          const timedTextUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=srv3`;
+          const xmlText = await fetchWithProxy(timedTextUrl);
+          const transcript = parseTranscriptXml(xmlText);
+          if (transcript) {
+            return `[YouTube Video: ${title}]\n[Video ID: ${videoId}]\n\n--- TRANSCRIPT ---\n\n${transcript}`;
+          }
+        } catch (e) { /* try next method */ }
+
+        // Method 3: Try auto-generated captions
+        try {
+          const timedTextUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&kind=asr&fmt=srv3`;
+          const xmlText = await fetchWithProxy(timedTextUrl);
+          const transcript = parseTranscriptXml(xmlText);
+          if (transcript) {
+            return `[YouTube Video: ${title}]\n[Video ID: ${videoId}]\n[Auto-generated captions]\n\n--- TRANSCRIPT ---\n\n${transcript}`;
+          }
+        } catch (e) { /* try next method */ }
+
+        // Method 4: Extract whatever text we can from the page HTML
+        const descMatch = html.match(/"shortDescription":\s*"(.*?)"/);
+        const description = descMatch ? JSON.parse(`"${descMatch[1]}"`) : '';
+
+        // Try to extract key content from initial player response
+        let pageContent = `[YouTube Video: ${title}]\n[Video ID: ${videoId}]\n`;
+        if (description) pageContent += `\n[Video Description]\n${description}\n`;
+
+        // Extract chapters if available
+        const chaptersMatch = html.match(/"chapterRenderer".*?"title".*?"simpleText":"(.*?)"/g);
+        if (chaptersMatch && chaptersMatch.length > 0) {
+          pageContent += '\n[Chapters]\n';
+          chaptersMatch.forEach(ch => {
+            const t = ch.match(/"simpleText":"(.*?)"/);
+            if (t) pageContent += `- ${t[1]}\n`;
+          });
+        }
+
+        if (pageContent.length > 200) return pageContent;
+
+        throw new Error('No transcript or captions available for this video');
+      } catch (err) {
+        throw new Error(`YouTube extraction failed: ${err.message}`);
+      }
+    }
+
+    function parseTranscriptXml(xml) {
+      if (!xml || xml.length < 20) return null;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xml, 'text/xml');
+
+      // Try <text> elements (YouTube timedtext format)
+      let textNodes = doc.querySelectorAll('text');
+      if (textNodes.length === 0) textNodes = doc.querySelectorAll('p');
+      if (textNodes.length === 0) {
+        // Try body > * approach
+        const body = doc.querySelector('body, transcript');
+        if (body) {
+          textNodes = body.children;
+        }
+      }
+
+      if (textNodes.length === 0) return null;
+
+      const lines = [];
+      let lastTimestamp = '';
+      textNodes.forEach((node, i) => {
+        let text = (node.textContent || '').trim();
+        text = text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+        if (!text) return;
+
+        const start = node.getAttribute('start') || node.getAttribute('t');
+        if (start && i % 5 === 0) { // Add timestamp every ~5 segments
+          const secs = parseFloat(start);
+          if (!isNaN(secs)) {
+            const mins = Math.floor(secs / 60);
+            const s = Math.floor(secs % 60);
+            lastTimestamp = `[${mins}:${s.toString().padStart(2, '0')}]`;
+            lines.push(`\n${lastTimestamp}`);
+          }
+        }
+        lines.push(text);
+      });
+
+      const result = lines.join(' ').replace(/\n /g, '\n').trim();
+      return result.length > 20 ? result : null;
+    }
+
+    // ============================================
+    // GOOGLE DOCS EXTRACTION
+    // ============================================
+    async function extractGoogleDoc(url) {
+      // Convert to export URL for plain text
+      const docIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (!docIdMatch) throw new Error('Could not extract Google Doc ID');
+      const docId = docIdMatch[1];
+
+      // Try exported plain text first
+      try {
+        const exportUrl = `https://docs.google.com/document/d/${docId}/export?format=txt`;
+        const text = await fetchWithProxy(exportUrl);
+        if (text && text.length > 50 && !text.includes('<!DOCTYPE')) {
+          return `[Google Doc]\n\n${text}`;
+        }
+      } catch (e) { /* try HTML */ }
+
+      // Try HTML export and parse
+      try {
+        const exportUrl = `https://docs.google.com/document/d/${docId}/export?format=html`;
+        const html = await fetchWithProxy(exportUrl);
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const text = doc.body?.innerText || doc.body?.textContent || '';
+        if (text.length > 50) return `[Google Doc]\n\n${text}`;
+      } catch (e) { /* try pub */ }
+
+      // Try published version
+      try {
+        const pubUrl = `https://docs.google.com/document/d/${docId}/pub`;
+        const html = await fetchWithProxy(pubUrl);
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const text = doc.body?.innerText || doc.body?.textContent || '';
+        if (text.length > 50) return `[Google Doc]\n\n${text}`;
+      } catch (e) { /* give up */ }
+
+      throw new Error('Google Doc may not be publicly shared. Make it "Anyone with the link can view".');
+    }
+
+    // ============================================
+    // GOOGLE SLIDES EXTRACTION
+    // ============================================
+    async function extractGoogleSlides(url) {
+      const docIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (!docIdMatch) throw new Error('Could not extract Slides ID');
+      const docId = docIdMatch[1];
+
+      try {
+        const exportUrl = `https://docs.google.com/presentation/d/${docId}/export?format=txt`;
+        const text = await fetchWithProxy(exportUrl);
+        if (text && text.length > 50 && !text.includes('<!DOCTYPE')) {
+          return `[Google Slides]\n\n${text}`;
+        }
+      } catch(e) {}
+
+      try {
+        const pubUrl = `https://docs.google.com/presentation/d/${docId}/pub?start=false&loop=false&delayms=3000`;
+        const html = await fetchWithProxy(pubUrl);
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const text = doc.body?.innerText || doc.body?.textContent || '';
+        if (text.length > 50) return `[Google Slides]\n\n${text}`;
+      } catch(e) {}
+
+      throw new Error('Google Slides may not be publicly shared.');
+    }
+
+    // ============================================
+    // GOOGLE SHEETS EXTRACTION
+    // ============================================
+    async function extractGoogleSheets(url) {
+      const docIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (!docIdMatch) throw new Error('Could not extract Sheets ID');
+      const docId = docIdMatch[1];
+
+      try {
+        const exportUrl = `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`;
+        const text = await fetchWithProxy(exportUrl);
+        if (text && text.length > 20) return `[Google Sheets]\n\n${text}`;
+      } catch(e) {}
+
+      throw new Error('Google Sheets may not be publicly shared.');
+    }
+
+    // ============================================
+    // GENERAL WEBPAGE EXTRACTION
+    // ============================================
+    async function extractWebpage(url) {
+      const html = await fetchWithProxy(url);
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+
+      // Remove non-content elements
+      const removeTags = ['script', 'style', 'nav', 'footer', 'header', 'iframe', 'noscript', 'svg', 'form'];
+      removeTags.forEach(tag => {
+        doc.querySelectorAll(tag).forEach(el => el.remove());
+      });
+
+      // Try to find main content area
+      const contentSelectors = ['article', 'main', '[role="main"]', '.content', '.post-content', '.entry-content', '#content', '.article-body'];
+      for (const sel of contentSelectors) {
+        const el = doc.querySelector(sel);
+        if (el && el.innerText && el.innerText.trim().length > 200) {
+          const title = doc.querySelector('title')?.textContent || '';
+          return `[Webpage: ${title}]\n[URL: ${url}]\n\n${el.innerText.trim()}`;
+        }
+      }
+
+      // Fallback to body text
+      const bodyText = doc.body?.innerText || doc.body?.textContent || '';
+      const title = doc.querySelector('title')?.textContent || '';
+
+      // Clean up excessive whitespace
+      const cleaned = bodyText.replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim();
+      if (cleaned.length > 100) {
+        return `[Webpage: ${title}]\n[URL: ${url}]\n\n${cleaned.substring(0, 50000)}`;
+      }
+
+      throw new Error('Could not extract meaningful content from this page');
+    }
+
+    // ============================================
+    // AUDIO TRANSCRIPTION (Web Speech API + Whisper fallback info)
+    // ============================================
+    async function transcribeAudioFile(file) {
+      return new Promise((resolve, reject) => {
+        showToast('Transcribing audio using browser speech recognition...', 'success');
+
+        // Use Web Audio API to decode the file, then play through AudioContext
+        // and use Web Speech API to transcribe
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          // Provide helpful fallback message
+          resolve(`[AUDIO FILE: ${file.name}]\n[Browser speech recognition not supported. Please use Chrome/Edge for audio transcription, or transcribe this audio manually and paste the text in the text box above.]`);
+          return;
+        }
+
+        // For audio files, we create an audio element and use MediaStream + SpeechRecognition
+        const audioUrl = URL.createObjectURL(file);
+        const audio = new Audio(audioUrl);
+
+        // Use AudioContext to route audio to SpeechRecognition
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaElementSource(audio);
+        const dest = audioContext.createMediaStreamDestination();
+        source.connect(dest);
+        source.connect(audioContext.destination); // also play to speakers (can mute later)
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.lang = 'en-GB';
+        recognition.maxAlternatives = 1;
+
+        let transcript = '';
+        let timeout;
+
+        recognition.onresult = (event) => {
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              transcript += event.results[i][0].transcript + ' ';
+            }
+          }
+          // Reset timeout on each result
+          clearTimeout(timeout);
+          timeout = setTimeout(() => {
+            recognition.stop();
+          }, 5000);
+        };
+
+        recognition.onerror = (event) => {
+          console.error('Speech recognition error:', event.error);
+          if (transcript.length > 50) {
+            resolve(`[AUDIO FILE: ${file.name}]\n[Partial transcript - recognition ended: ${event.error}]\n\n${transcript}`);
+          } else {
+            resolve(`[AUDIO FILE: ${file.name}]\n[Speech recognition failed: ${event.error}. Please transcribe manually and paste in the text box above.]`);
+          }
+          audio.pause();
+          URL.revokeObjectURL(audioUrl);
+        };
+
+        recognition.onend = () => {
+          audio.pause();
+          URL.revokeObjectURL(audioUrl);
+          if (transcript.length > 20) {
+            resolve(`[AUDIO FILE: ${file.name}]\n[Transcribed via browser speech recognition]\n\n${transcript.trim()}`);
+          } else {
+            resolve(`[AUDIO FILE: ${file.name}]\n[Transcription produced limited output. Please paste the audio content as text in the text box above for best results.]`);
+          }
+        };
+
+        audio.onended = () => {
+          setTimeout(() => recognition.stop(), 2000);
+        };
+
+        // Start
+        audio.volume = 0.01; // near-silent playback
+        recognition.start();
+        audio.play().catch(err => {
+          resolve(`[AUDIO FILE: ${file.name}]\n[Could not play audio for transcription: ${err.message}. Please transcribe manually.]`);
+        });
+
+        // Safety timeout (max 10 minutes)
+        setTimeout(() => {
+          recognition.stop();
+          audio.pause();
+        }, 600000);
+      });
     }
 
     function classifyUrl(url) {
       const u = url.toLowerCase();
       if (u.includes('youtube.com') || u.includes('youtu.be'))
-        return { label: 'YouTube Video', icon: '🎬', instruction: '[YouTube video - extract transcript and key educational content for question generation]' };
+        return { label: 'YouTube Video', icon: '🎬' };
       if (u.includes('notion.so') || u.includes('notion.site'))
-        return { label: 'Notion Page', icon: '📓', instruction: '[Notion page - extract all content including tables, lists, and embedded data for question generation]' };
+        return { label: 'Notion Page', icon: '📓' };
       if (u.includes('docs.google.com/document'))
-        return { label: 'Google Doc', icon: '📄', instruction: '[Google Docs document - extract full text content for question generation]' };
+        return { label: 'Google Doc', icon: '📄' };
       if (u.includes('docs.google.com/presentation'))
-        return { label: 'Google Slides', icon: '📊', instruction: '[Google Slides presentation - extract all slide content and speaker notes for question generation]' };
+        return { label: 'Google Slides', icon: '📊' };
       if (u.includes('docs.google.com/spreadsheets'))
-        return { label: 'Google Sheets', icon: '📈', instruction: '[Google Sheets - extract data tables and content for question generation]' };
+        return { label: 'Google Sheets', icon: '📈' };
       if (u.includes('drive.google.com'))
-        return { label: 'Google Drive', icon: '☁️', instruction: '[Google Drive file - access and extract content for question generation]' };
+        return { label: 'Google Drive', icon: '☁️' };
       if (u.includes('onedrive.live.com') || u.includes('1drv.ms') || u.includes('sharepoint.com'))
-        return { label: 'Microsoft OneDrive/SharePoint', icon: '☁️', instruction: '[Microsoft cloud document - extract content for question generation]' };
+        return { label: 'OneDrive/SharePoint', icon: '☁️' };
       if (u.includes('idrive.com'))
-        return { label: 'iDrive', icon: '☁️', instruction: '[iDrive file - extract content for question generation]' };
+        return { label: 'iDrive', icon: '☁️' };
       if (u.includes('dropbox.com'))
-        return { label: 'Dropbox', icon: '☁️', instruction: '[Dropbox file - extract content for question generation]' };
+        return { label: 'Dropbox', icon: '☁️' };
       if (u.includes('pubmed.ncbi.nlm.nih.gov'))
-        return { label: 'PubMed Article', icon: '🔬', instruction: '[PubMed article - extract abstract, methods, results, and conclusions for question generation]' };
+        return { label: 'PubMed Article', icon: '🔬' };
       if (u.includes('biorxiv.org') || u.includes('medrxiv.org'))
-        return { label: 'Preprint', icon: '📰', instruction: '[Preprint - extract key findings and methodology for question generation]' };
-      return { label: 'Website', icon: '🔗', instruction: '[Website - extract relevant content for question generation]' };
+        return { label: 'Preprint', icon: '📰' };
+      return { label: 'Website', icon: '🔗' };
     }
 
     function updateUrlList() {
@@ -1412,13 +1825,31 @@
       list.innerHTML = addedUrls.map((url, index) => {
         const urlType = classifyUrl(url);
         return `
-          <div class="url-chip">
+          <div class="url-chip" id="urlChip${index}">
             <span>${urlType.icon}</span>
             <span class="url-chip-text" title="${url}">${urlType.label}: ${url}</span>
             <span class="file-chip-remove" onclick="removeUrl(${index})">×</span>
           </div>
         `;
       }).join('');
+    }
+
+    function updateUrlListWithStatus(index, status) {
+      const chip = document.getElementById(`urlChip${index}`);
+      if (!chip) return;
+      const statusIcons = { extracting: '⏳', done: '✅', partial: '⚠️', failed: '❌' };
+      const statusColors = { extracting: '#fff3e6', done: '#cde8e4', partial: '#fff3e6', failed: '#f4d8dd' };
+      chip.style.background = statusColors[status] || '';
+      const iconSpan = chip.querySelector('span');
+      if (iconSpan && statusIcons[status]) {
+        if (status !== 'extracting') {
+          // Prepend status icon
+          const urlType = classifyUrl(addedUrls[index]);
+          iconSpan.textContent = statusIcons[status];
+        } else {
+          iconSpan.textContent = '⏳';
+        }
+      }
     }
 
     function removeUrl(index) {
