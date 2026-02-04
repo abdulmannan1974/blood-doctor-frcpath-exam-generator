@@ -17,6 +17,12 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
   <!-- PPTXjs dependencies -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+  <!-- html2canvas for PDF rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- docx for Word export -->
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
   <style>
     :root {
       --ink: #11131a;
@@ -988,8 +994,10 @@
             <h3>Generated Questions <span class="card-tag">Step 3</span></h3>
             <div class="output-actions">
               <button class="btn btn-small btn-secondary" id="stopBtn" onclick="stopGeneration()" style="display:none;">Stop</button>
-              <button class="btn btn-small btn-teal" id="copyBtn" onclick="copyOutput()">Copy</button>
-              <button class="btn btn-small btn-gold" id="downloadBtn" onclick="downloadOutput()">Download .md</button>
+              <button class="btn btn-small btn-teal" id="copyBtn" onclick="copyOutput()">📋 Copy</button>
+              <button class="btn btn-small btn-primary" id="downloadPdfBtn" onclick="downloadPDF()">📕 PDF</button>
+              <button class="btn btn-small btn-secondary" id="downloadDocxBtn" onclick="downloadDOCX()" style="background:#2b579a;color:white;">📘 Word</button>
+              <button class="btn btn-small btn-gold" id="downloadMdBtn" onclick="downloadOutput()">📝 Markdown</button>
             </div>
           </div>
           <div id="progressArea" style="display:none; padding: 16px 20px 0;">
@@ -1966,6 +1974,424 @@ Always end with: #BloodDoctor`
       URL.revokeObjectURL(url);
 
       showToast('Downloaded: ' + filename, 'success');
+    }
+
+    // ============================================
+    // PDF EXPORT
+    // ============================================
+    async function downloadPDF() {
+      const content = generatedOutput || rawMarkdown;
+      if (!content) {
+        showToast('Nothing to download yet', 'error');
+        return;
+      }
+
+      showToast('Generating PDF...', 'success');
+
+      // Create a hidden container with proper styling for PDF capture
+      const container = document.createElement('div');
+      container.style.cssText = `
+        position: absolute; left: -9999px; top: 0;
+        width: 750px; padding: 40px 50px;
+        background: white; font-family: 'Sora', system-ui, sans-serif;
+        color: #11131a; font-size: 11px; line-height: 1.6;
+      `;
+
+      // Add header
+      const header = `
+        <div style="text-align:center; margin-bottom:24px; padding-bottom:16px; border-bottom:3px solid #8b0e1c;">
+          <div style="font-size:22px; font-weight:700; font-family:'Fraunces',serif; color:#8b0e1c;">Blood🩸Doctor</div>
+          <div style="font-size:14px; color:#5c6170; margin-top:4px;">FRCPath Haematology Exam Question Generator</div>
+          <div style="font-size:10px; color:#5c6170; margin-top:4px;">Dr Abdul Mannan FRCPath FCPS | Generated: ${new Date().toLocaleDateString('en-GB')} | #BloodDoctor</div>
+        </div>
+      `;
+
+      const renderedHtml = marked.parse(content);
+
+      // Style the rendered content for PDF
+      const styledContent = `
+        <style>
+          h1 { font-size:18px; color:#8b0e1c; border-bottom:2px solid #f4d8dd; padding-bottom:6px; margin:20px 0 10px; font-family:'Fraunces',serif; }
+          h2 { font-size:15px; color:#0f766e; margin:16px 0 8px; font-family:'Fraunces',serif; }
+          h3 { font-size:13px; margin:12px 0 6px; font-weight:700; }
+          h4 { font-size:12px; color:#5c6170; margin:10px 0 4px; }
+          p { margin-bottom:8px; }
+          ul, ol { margin:6px 0 8px 18px; }
+          li { margin-bottom:3px; }
+          strong { color:#8b0e1c; }
+          table { width:100%; border-collapse:collapse; margin:8px 0; font-size:10px; }
+          th { background:#f3f6f8; padding:6px 8px; text-align:left; font-weight:600; border-bottom:2px solid #cde8e4; }
+          td { padding:5px 8px; border-bottom:1px solid #eee; }
+          blockquote { border-left:3px solid #d7a35d; padding:6px 12px; margin:8px 0; background:#fff9ef; }
+          hr { border:none; height:2px; background:#f4d8dd; margin:16px 0; }
+          code { background:#f3f6f8; padding:1px 4px; border-radius:3px; font-size:10px; }
+          pre { background:#1e1e2e; color:#cdd6f4; padding:10px; border-radius:6px; font-size:10px; overflow:hidden; }
+        </style>
+        ${header}
+        ${renderedHtml}
+        <div style="text-align:center; margin-top:24px; padding-top:12px; border-top:2px solid #f4d8dd; font-size:9px; color:#5c6170;">
+          Blood🩸Doctor | Dr Abdul Mannan FRCPath FCPS | Bangor Haemophilia Centre | #BloodDoctor
+        </div>
+      `;
+
+      container.innerHTML = styledContent;
+      document.body.appendChild(container);
+
+      try {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+
+        // Use html2canvas to render the styled HTML
+        const canvas = await html2canvas(container, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          width: 750,
+          windowWidth: 750
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const imgWidth = pageWidth - 20; // 10mm margins
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        // Split across pages
+        let heightLeft = imgHeight;
+        let position = 10; // top margin
+        const pageContentHeight = pageHeight - 20; // 10mm top + 10mm bottom
+
+        // First page
+        pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
+        heightLeft -= pageContentHeight;
+
+        while (heightLeft > 0) {
+          position = position - pageContentHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
+          heightLeft -= pageContentHeight;
+        }
+
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
+        pdf.save(`BloodDoctor_FRCPath_Questions_${dateStr}_${timeStr}.pdf`);
+        showToast('PDF downloaded successfully!', 'success');
+      } catch (err) {
+        console.error('PDF generation error:', err);
+        showToast('PDF generation failed: ' + err.message, 'error');
+      } finally {
+        document.body.removeChild(container);
+      }
+    }
+
+    // ============================================
+    // DOCX (Word) EXPORT
+    // ============================================
+    async function downloadDOCX() {
+      const content = generatedOutput || rawMarkdown;
+      if (!content) {
+        showToast('Nothing to download yet', 'error');
+        return;
+      }
+
+      showToast('Generating Word document...', 'success');
+
+      try {
+        const {
+          Document, Packer, Paragraph, TextRun, HeadingLevel,
+          AlignmentType, BorderStyle, TableRow, TableCell, Table,
+          WidthType, ShadingType, Header, Footer, ImageRun,
+          PageBreak, TabStopType, TabStopPosition
+        } = docx;
+
+        const lines = content.split('\n');
+        const children = [];
+
+        // Title header
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+          children: [
+            new TextRun({ text: 'Blood', size: 44, bold: true, font: 'Calibri' }),
+            new TextRun({ text: '🩸', size: 44 }),
+            new TextRun({ text: 'Doctor', size: 44, bold: true, font: 'Calibri' }),
+          ]
+        }));
+
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 50 },
+          children: [
+            new TextRun({ text: 'FRCPath Haematology Exam Questions', size: 24, color: '0f766e', font: 'Calibri' }),
+          ]
+        }));
+
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '8b0e1c' } },
+          children: [
+            new TextRun({ text: `Dr Abdul Mannan FRCPath FCPS | Generated: ${new Date().toLocaleDateString('en-GB')} | #BloodDoctor`, size: 18, color: '5c6170', font: 'Calibri' }),
+          ]
+        }));
+
+        // Parse markdown into paragraphs
+        let inCodeBlock = false;
+        let codeBlockContent = [];
+        let inTable = false;
+        let tableRows = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const trimmed = line.trim();
+
+          // Code blocks
+          if (trimmed.startsWith('```')) {
+            if (inCodeBlock) {
+              children.push(new Paragraph({
+                spacing: { before: 100, after: 100 },
+                shading: { type: ShadingType.SOLID, color: 'f3f6f8' },
+                children: [new TextRun({ text: codeBlockContent.join('\n'), font: 'Courier New', size: 18 })]
+              }));
+              codeBlockContent = [];
+              inCodeBlock = false;
+            } else {
+              inCodeBlock = true;
+            }
+            continue;
+          }
+
+          if (inCodeBlock) {
+            codeBlockContent.push(line);
+            continue;
+          }
+
+          // Table detection
+          if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+            if (trimmed.replace(/[|\-\s:]/g, '') === '') continue; // separator row
+            const cells = trimmed.split('|').filter(c => c.trim() !== '').map(c => c.trim());
+            tableRows.push(cells);
+            // Check if next line is not a table row
+            const nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : '';
+            if (!nextLine.startsWith('|')) {
+              // Render table
+              if (tableRows.length > 0) {
+                try {
+                  const tRows = tableRows.map((row, idx) =>
+                    new TableRow({
+                      children: row.map(cell =>
+                        new TableCell({
+                          width: { size: Math.floor(9000 / row.length), type: WidthType.DXA },
+                          shading: idx === 0 ? { type: ShadingType.SOLID, color: 'f3f6f8' } : undefined,
+                          children: [new Paragraph({
+                            children: [new TextRun({
+                              text: cell,
+                              bold: idx === 0,
+                              size: 18,
+                              font: 'Calibri'
+                            })]
+                          })]
+                        })
+                      )
+                    })
+                  );
+                  children.push(new Table({ rows: tRows, width: { size: 9000, type: WidthType.DXA } }));
+                } catch(e) { /* skip malformed tables */ }
+              }
+              tableRows = [];
+            }
+            continue;
+          }
+
+          // Empty line
+          if (trimmed === '') {
+            children.push(new Paragraph({ spacing: { after: 80 } }));
+            continue;
+          }
+
+          // Horizontal rule
+          if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
+            children.push(new Paragraph({
+              border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: 'f4d8dd' } },
+              spacing: { before: 200, after: 200 },
+            }));
+            continue;
+          }
+
+          // Headings
+          if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
+            children.push(new Paragraph({
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 300, after: 100 },
+              border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'f4d8dd' } },
+              children: [new TextRun({ text: trimmed.replace(/^# /, ''), bold: true, size: 32, color: '8b0e1c', font: 'Calibri' })]
+            }));
+            continue;
+          }
+
+          if (trimmed.startsWith('## ')) {
+            children.push(new Paragraph({
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 250, after: 80 },
+              children: [new TextRun({ text: trimmed.replace(/^## /, ''), bold: true, size: 28, color: '0f766e', font: 'Calibri' })]
+            }));
+            continue;
+          }
+
+          if (trimmed.startsWith('### ')) {
+            children.push(new Paragraph({
+              heading: HeadingLevel.HEADING_3,
+              spacing: { before: 200, after: 60 },
+              children: [new TextRun({ text: trimmed.replace(/^### /, ''), bold: true, size: 24, font: 'Calibri' })]
+            }));
+            continue;
+          }
+
+          if (trimmed.startsWith('#### ')) {
+            children.push(new Paragraph({
+              heading: HeadingLevel.HEADING_4,
+              spacing: { before: 150, after: 50 },
+              children: [new TextRun({ text: trimmed.replace(/^#### /, ''), bold: true, size: 22, color: '5c6170', font: 'Calibri' })]
+            }));
+            continue;
+          }
+
+          // Blockquote
+          if (trimmed.startsWith('> ')) {
+            children.push(new Paragraph({
+              indent: { left: 400 },
+              spacing: { before: 80, after: 80 },
+              border: { left: { style: BorderStyle.SINGLE, size: 6, color: 'd7a35d' } },
+              children: parseInlineFormatting(trimmed.replace(/^> /, ''))
+            }));
+            continue;
+          }
+
+          // Bullet list
+          if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+            const indent = line.search(/\S/);
+            children.push(new Paragraph({
+              bullet: { level: Math.min(Math.floor(indent / 2), 3) },
+              spacing: { after: 40 },
+              children: parseInlineFormatting(trimmed.replace(/^[-*] /, ''))
+            }));
+            continue;
+          }
+
+          // Numbered list
+          const numberedMatch = trimmed.match(/^\d+\.\s+/);
+          if (numberedMatch) {
+            children.push(new Paragraph({
+              numbering: { reference: 'default-numbering', level: 0 },
+              spacing: { after: 40 },
+              children: parseInlineFormatting(trimmed.replace(/^\d+\.\s+/, ''))
+            }));
+            continue;
+          }
+
+          // Normal paragraph with inline formatting
+          children.push(new Paragraph({
+            spacing: { after: 60 },
+            children: parseInlineFormatting(trimmed)
+          }));
+        }
+
+        // Footer
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 300 },
+          border: { top: { style: BorderStyle.SINGLE, size: 3, color: 'f4d8dd' } },
+          children: [
+            new TextRun({ text: 'Blood🩸Doctor | Dr Abdul Mannan FRCPath FCPS | #BloodDoctor', size: 16, color: '5c6170', font: 'Calibri' }),
+          ]
+        }));
+
+        const doc = new Document({
+          numbering: {
+            config: [{
+              reference: 'default-numbering',
+              levels: [{
+                level: 0,
+                format: 'decimal',
+                text: '%1.',
+                alignment: AlignmentType.START,
+              }]
+            }]
+          },
+          sections: [{
+            properties: {
+              page: {
+                margin: { top: 1000, right: 1000, bottom: 1000, left: 1000 }
+              }
+            },
+            children: children
+          }]
+        });
+
+        const blob = await Packer.toBlob(doc);
+
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
+        const filename = `BloodDoctor_FRCPath_Questions_${dateStr}_${timeStr}.docx`;
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('Word document downloaded!', 'success');
+      } catch (err) {
+        console.error('DOCX generation error:', err);
+        showToast('Word export failed: ' + err.message, 'error');
+      }
+    }
+
+    // Parse inline markdown formatting into TextRun array
+    function parseInlineFormatting(text) {
+      const runs = [];
+      // Split by bold (**text**) and inline code (`text`)
+      const regex = /(\*\*(.+?)\*\*)|(`(.+?)`)|([^*`]+)/g;
+      let match;
+
+      while ((match = regex.exec(text)) !== null) {
+        if (match[1]) {
+          // Bold
+          runs.push(new docx.TextRun({ text: match[2], bold: true, size: 20, color: '8b0e1c', font: 'Calibri' }));
+        } else if (match[3]) {
+          // Inline code
+          runs.push(new docx.TextRun({ text: match[4], font: 'Courier New', size: 18, shading: { type: docx.ShadingType.SOLID, color: 'f3f6f8' } }));
+        } else if (match[5]) {
+          // Normal text - also handle italic (*text*)
+          let normalText = match[5];
+          const italicRegex = /\*(.+?)\*/g;
+          let lastIndex = 0;
+          let italicMatch;
+
+          while ((italicMatch = italicRegex.exec(normalText)) !== null) {
+            if (italicMatch.index > lastIndex) {
+              runs.push(new docx.TextRun({ text: normalText.slice(lastIndex, italicMatch.index), size: 20, font: 'Calibri' }));
+            }
+            runs.push(new docx.TextRun({ text: italicMatch[1], italics: true, size: 20, font: 'Calibri' }));
+            lastIndex = italicMatch.index + italicMatch[0].length;
+          }
+
+          if (lastIndex < normalText.length) {
+            runs.push(new docx.TextRun({ text: normalText.slice(lastIndex), size: 20, font: 'Calibri' }));
+          }
+        }
+      }
+
+      if (runs.length === 0) {
+        runs.push(new docx.TextRun({ text: text, size: 20, font: 'Calibri' }));
+      }
+
+      return runs;
     }
 
     // ============================================
